@@ -1,0 +1,77 @@
+[
+  {
+    "question": "這台筆電使用什麼處理器？",
+    "expected_category": "中央處理器",
+    "language": "zh"
+  },
+  {
+    "question": "What CPU does this laptop use?",
+    "expected_category": "中央處理器",
+    "language": "en"
+  },
+  {
+    "question": "這台筆電的顯示卡是什麼？",
+    "expected_category": "顯示晶片",
+    "language": "zh"
+  },
+  {
+    "question": "What GPU does this laptop use?",
+    "expected_category": "顯示晶片",
+    "language": "en"
+  },
+  {
+    "question": "這台筆電的記憶體最高是多少？",
+    "expected_category": "記憶體",
+    "language": "zh"
+  },
+  {
+    "question": "What is the maximum RAM capacity?",
+    "expected_category": "記憶體",
+    "language": "en"
+  },
+  {
+    "question": "這台 laptop 的 RAM 最大多少？",
+    "expected_category": "記憶體",
+    "language": "mixed"
+  },
+  {
+    "question": "這台筆電的電池容量是多少？",
+    "expected_category": "電池",
+    "language": "zh"
+  },
+  {
+    "question": "What is the battery capacity?",
+    "expected_category": "電池",
+    "language": "en"
+  },
+  {
+    "question": "這台筆電有支援 Wi-Fi 7 嗎？",
+    "expected_category": "通訊",
+    "language": "zh"
+  },
+  {
+    "question": "Does this laptop support Bluetooth?",
+    "expected_category": "通訊",
+    "language": "en"
+  },
+  {
+    "question": "這台筆電有 Thunderbolt 5 嗎？",
+    "expected_category": "連接埠",
+    "language": "zh"
+  },
+  {
+    "question": "What is the laptop weight?",
+    "expected_category": "重量",
+    "language": "en"
+  },
+  {
+    "question": "這台筆電尺寸多大？",
+    "expected_category": "尺寸",
+    "language": "zh"
+  },
+  {
+    "question": "What color is this laptop?",
+    "expected_category": "顏色",
+    "language": "en"
+  }
+]

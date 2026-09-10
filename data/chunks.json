@@ -1,0 +1,121 @@
+[
+  {
+    "id": 0,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "作業系統",
+    "content": "Windows 11 Pro (GIGABYTE recommends Windows 11 Pro for business.)\nWindows 11 Home\nUEFI Shell OS",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：作業系統\n內容：Windows 11 Pro (GIGABYTE recommends Windows 11 Pro for business.)\nWindows 11 Home\nUEFI Shell OS"
+  },
+  {
+    "id": 1,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "中央處理器",
+    "content": "Intel® Core™ Ultra 9 Processor 275HX (36MB cache, up to 5.4 GHz, 24 cores, 24 threads)",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：中央處理器\n內容：Intel® Core™ Ultra 9 Processor 275HX (36MB cache, up to 5.4 GHz, 24 cores, 24 threads)"
+  },
+  {
+    "id": 2,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "顯示晶片",
+    "content": "NVIDIA® GeForce RTX™ 5090 Laptop GPU\n24GB GDDR7\n175W Maximum Graphics Power with Dynamic Boost*\nAI Boost : 1797 MHz (1597 MHz Boost Clock + 200 MHz OC)*\n*May vary by scenario",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：顯示晶片\n內容：NVIDIA® GeForce RTX™ 5090 Laptop GPU\n24GB GDDR7\n175W Maximum Graphics Power with Dynamic Boost*\nAI Boost : 1797 MHz (1597 MHz Boost Clock + 200 MHz OC)*\n*May vary by scenario"
+  },
+  {
+    "id": 3,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "顯示器",
+    "content": "16\" 16:10\nOLED WQXGA (2560×1600) 240Hz, 1ms, DCIP-3 100%, 500nits (peak), 1,000,000:1\nNVIDIA® G-SYNC®\nNVIDIA® Advanced Optimus\nVESA DisplayHDR True Black 500\nVESA ClearMR 10000\nPantone® Validated\nTÜV Rheinland Low Blue Light\nDolby Vision®",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：顯示器\n內容：16\" 16:10\nOLED WQXGA (2560×1600) 240Hz, 1ms, DCIP-3 100%, 500nits (peak), 1,000,000:1\nNVIDIA® G-SYNC®\nNVIDIA® Advanced Optimus\nVESA DisplayHDR True Black 500\nVESA ClearMR 10000\nPantone® Validated\nTÜV Rheinland Low Blue Light\nDolby Vision®"
+  },
+  {
+    "id": 4,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "記憶體",
+    "content": "Up to 64GB DDR5 5600MHz\n* 2x SO-DIMM sockets for expansion",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：記憶體\n內容：Up to 64GB DDR5 5600MHz\n* 2x SO-DIMM sockets for expansion"
+  },
+  {
+    "id": 5,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "儲存裝置",
+    "content": "1x PCIe Gen5 M.2 slot\n1x PCIe Gen4x4 M.2 slots\nUp to 4TB PCIe NVMe™ M.2 SSD\n*The storage capacity may differ by country and region. Please contact your local dealers or retailers for the latest product information.\n**If there is any abnormality that cannot be attributed to Gigabyte/AORUS during the warranty period, it is not covered by the warranty. More info:\nhttps://member.aorus.com/global/productwarranty",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：儲存裝置\n內容：1x PCIe Gen5 M.2 slot\n1x PCIe Gen4x4 M.2 slots\nUp to 4TB PCIe NVMe™ M.2 SSD\n*The storage capacity may differ by country and region. Please contact your local dealers or retailers for the latest product information.\n**If there is any abnormality that cannot be attributed to Gigabyte/AORUS during the warranty period, it is not covered by the warranty. More info:\nhttps://member.aorus.com/global/productwarranty"
+  },
+  {
+    "id": 6,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "鍵盤種類",
+    "content": "3-zone RGB Backlit Keyboard, Up to 1.7mm Key-travel (Support N-Key)",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：鍵盤種類\n內容：3-zone RGB Backlit Keyboard, Up to 1.7mm Key-travel (Support N-Key)"
+  },
+  {
+    "id": 7,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "連接埠",
+    "content": "Left Side:\n1 x DC in\n1 x RJ-45\n1 x HDMI 2.1\n1 x Type-A support USB3.2 Gen2\n1 x Type-C with Thunderbolt™5 (support USB4, DisplayPort™ 2.1 and Power Delivery 3.0)\nRight Side:\n1 x Type-A support USB3.2 Gen2\n1 x Type-C with Thunderbolt™4 (support USB4, DisplayPort™ 1.4 and Power Delivery 3.0)\n1 x MicroSD (UHS-II)\n1 x Audio Jack support mic / headphone combo",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：連接埠\n內容：Left Side:\n1 x DC in\n1 x RJ-45\n1 x HDMI 2.1\n1 x Type-A support USB3.2 Gen2\n1 x Type-C with Thunderbolt™5 (support USB4, DisplayPort™ 2.1 and Power Delivery 3.0)\nRight Side:\n1 x Type-A support USB3.2 Gen2\n1 x Type-C with Thunderbolt™4 (support USB4, DisplayPort™ 1.4 and Power Delivery 3.0)\n1 x MicroSD (UHS-II)\n1 x Audio Jack support mic / headphone combo"
+  },
+  {
+    "id": 8,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "音效",
+    "content": "4x 2W speakers\nMicrophone\nDolby Atmos®\nSmart Amp Technology",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：音效\n內容：4x 2W speakers\nMicrophone\nDolby Atmos®\nSmart Amp Technology"
+  },
+  {
+    "id": 9,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "通訊",
+    "content": "WIFI 7 (802.11be 2x2)\nLAN: 1G\nBluetooth v5.4",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：通訊\n內容：WIFI 7 (802.11be 2x2)\nLAN: 1G\nBluetooth v5.4"
+  },
+  {
+    "id": 10,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "視訊鏡頭",
+    "content": "FHD (1080p) IR Webcam\nBuild-in array Microphone\nSupport Windows Hello Face Authentication",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：視訊鏡頭\n內容：FHD (1080p) IR Webcam\nBuild-in array Microphone\nSupport Windows Hello Face Authentication"
+  },
+  {
+    "id": 11,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "安全裝置",
+    "content": "Firmware-based TPM, supports Intel® Platform Trust Technology (Intel® PTT)",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：安全裝置\n內容：Firmware-based TPM, supports Intel® Platform Trust Technology (Intel® PTT)"
+  },
+  {
+    "id": 12,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "電池",
+    "content": "Li-ion 99Wh",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：電池\n內容：Li-ion 99Wh"
+  },
+  {
+    "id": 13,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "變壓器",
+    "content": "330W AC Adapter",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：變壓器\n內容：330W AC Adapter"
+  },
+  {
+    "id": 14,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "尺寸",
+    "content": "357 x 254 x 23~29.9 mm\n*The dimensions of the laptop may vary according to the configuration, manufacturing process and measurement method, please refer to the actual situation.",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：尺寸\n內容：357 x 254 x 23~29.9 mm\n*The dimensions of the laptop may vary according to the configuration, manufacturing process and measurement method, please refer to the actual situation."
+  },
+  {
+    "id": 15,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "重量",
+    "content": "~2.5 kg\n*The weight of the laptop may vary according to the configuration, manufacturing process and measurement method, please refer to the actual situation.",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：重量\n內容：~2.5 kg\n*The weight of the laptop may vary according to the configuration, manufacturing process and measurement method, please refer to the actual situation."
+  },
+  {
+    "id": 16,
+    "product": "AORUS MASTER 16 AM6H",
+    "category": "顏色",
+    "content": "Dark Tide",
+    "text": "產品：AORUS MASTER 16 AM6H\n規格類別：顏色\n內容：Dark Tide"
+  }
+]
