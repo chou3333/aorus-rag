@@ -8,7 +8,108 @@ from aorus_rag.retriever import retrieve
 
 MODEL_PATH = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 N_GPU_LAYERS = int(os.getenv("N_GPU_LAYERS", "0"))
-
+CATEGORY_ALIASES = {
+    "中央處理器": [
+        "cpu",
+        "processor",
+        "處理器",
+        "中央處理器",
+    ],
+    "顯示晶片": [
+        "gpu",
+        "graphics",
+        "顯示晶片",
+        "顯示卡",
+    ],
+    "顯示器": [
+        "display",
+        "screen",
+        "monitor",
+        "螢幕",
+        "顯示器",
+        "解析度",
+        "refresh rate",
+        "更新率",
+        "刷新率",
+    ],
+    "記憶體": [
+        "ram",
+        "memory",
+        "記憶體",
+    ],
+    "儲存裝置": [
+        "storage",
+        "ssd",
+        "硬碟",
+        "儲存",
+    ],
+    "連接埠": [
+        "port",
+        "ports",
+        "usb",
+        "hdmi",
+        "thunderbolt",
+        "連接埠",
+        "接口",
+    ],
+    "音效": [
+        "audio",
+        "speaker",
+        "speakers",
+        "sound",
+        "音效",
+        "喇叭",
+    ],
+    "通訊": [
+        "wifi",
+        "wi-fi",
+        "bluetooth",
+        "lan",
+        "network",
+        "網路",
+        "藍牙",
+        "通訊",
+    ],
+    "視訊鏡頭": [
+        "webcam",
+        "camera",
+        "鏡頭",
+        "視訊鏡頭",
+    ],
+    "安全裝置": [
+        "tpm",
+        "security",
+        "安全",
+        "安全裝置",
+    ],
+    "電池": [
+        "battery",
+        "電池",
+    ],
+    "變壓器": [
+        "adapter",
+        "charger",
+        "power adapter",
+        "充電器",
+        "變壓器",
+    ],
+    "尺寸": [
+        "size",
+        "dimension",
+        "dimensions",
+        "尺寸",
+    ],
+    "重量": [
+        "weight",
+        "重量",
+        "多重",
+    ],
+    "顏色": [
+        "color",
+        "colour",
+        "顏色",
+    ],
+}
 
 print("正在載入 LLM...")
 
@@ -22,7 +123,34 @@ llm = Llama(
 print(f"GPU layers: {N_GPU_LAYERS}")
 print("LLM 載入完成")
 
+def detect_categories(query):
+    query_lower = query.lower()
 
+    matched_categories = []
+
+    for category, aliases in CATEGORY_ALIASES.items():
+
+        for alias in aliases:
+
+            alias_lower = alias.lower()
+
+            if re.fullmatch(r"[a-zA-Z0-9 -]+", alias_lower):
+                pattern = (
+                    r"(?<![a-zA-Z0-9])"
+                    + re.escape(alias_lower)
+                    + r"(?![a-zA-Z0-9])"
+                )
+
+                if re.search(pattern, query_lower):
+                    matched_categories.append(category)
+                    break
+
+            else:
+                if alias_lower in query_lower:
+                    matched_categories.append(category)
+                    break
+
+    return matched_categories
 def query_has_variant(query):
     query_upper = query.upper()
 
@@ -215,9 +343,153 @@ def build_forced_comparison_answer(results, query):
     return "\n\n".join(lines)
 def answer_question(query):
 
+    # ==================================================
+    # 1. 先偵測使用者是不是一次問多個規格類別
+    # ==================================================
+    detected_categories = detect_categories(query)
+
+    if len(detected_categories) > 1:
+        combined_answers = []
+        combined_results = []
+        response_language = get_response_language(query)
+
+        category_labels = {
+            "zh": {
+                "中央處理器": "中央處理器",
+                "顯示晶片": "顯示晶片",
+                "顯示器": "顯示器",
+                "記憶體": "記憶體",
+                "儲存裝置": "儲存裝置",
+                "連接埠": "連接埠",
+                "音效": "音效",
+                "通訊": "通訊",
+                "視訊鏡頭": "視訊鏡頭",
+                "安全裝置": "安全裝置",
+                "電池": "電池",
+                "變壓器": "變壓器",
+                "尺寸": "尺寸",
+                "重量": "重量",
+                "顏色": "顏色",
+            },
+            "en": {
+                "中央處理器": "CPU",
+                "顯示晶片": "GPU",
+                "顯示器": "Display",
+                "記憶體": "Memory",
+                "儲存裝置": "Storage",
+                "連接埠": "Ports",
+                "音效": "Audio",
+                "通訊": "Connectivity",
+                "視訊鏡頭": "Webcam",
+                "安全裝置": "Security",
+                "電池": "Battery",
+                "變壓器": "Power Adapter",
+                "尺寸": "Dimensions",
+                "重量": "Weight",
+                "顏色": "Color",
+            },
+        }
+
+        for category in detected_categories:
+
+            # 用 category 名稱本身做 retrieval
+            category_results = retrieve(
+                category,
+                top_k=1,
+                per_product=True,
+            )
+
+            # 只保留真正屬於這個 category 的結果
+            category_results = [
+                result
+                for result in category_results
+                if result["chunk"]["category"] == category
+            ]
+
+            if not category_results:
+                continue
+
+            combined_results.extend(category_results)
+
+            contents = [
+                result["chunk"]["content"].strip()
+                for result in category_results
+            ]
+
+            # ==================================================
+            # 三個 variant 的完整內容都相同
+            # 例如：
+            # 重量 / 尺寸 / 電池 / RAM
+            # ==================================================
+            label = category_labels[response_language].get(
+                category,
+                category,
+            )
+
+            if len(set(contents)) == 1:
+
+                value = category_results[0]["chunk"]["content"].strip()
+
+                combined_answers.append(
+                    f"{label}:\n{value}"
+                )
+
+            # ==================================================
+            # 三個 variant 不同
+            # 例如 GPU
+            # ==================================================
+            else:
+                variant_lines = []
+
+                for result in category_results:
+                    chunk = result["chunk"]
+                    variant = chunk["product"].split()[-1]
+
+                    variant_lines.append(
+                        f"{variant}:\n{chunk['content'].strip()}"
+                    )
+
+                combined_answers.append(
+                    f"{label}:\n"
+                    + "\n\n".join(variant_lines)
+                )
+
+        if combined_answers:
+            answer = "\n\n".join(combined_answers)
+
+            print()
+            print("=== Answer ===")
+            print(answer)
+
+            generated_tokens = llm.tokenize(
+                answer.encode("utf-8"),
+                add_bos=False,
+            )
+
+            token_count = len(generated_tokens)
+
+            metrics = {
+                "ttft": 0.0,
+                "tps": 0.0,
+                "generated_tokens": token_count,
+                "generation_time": 0.0,
+            }
+
+            print()
+            print("=== Performance ===")
+            print("TTFT: N/A (deterministic multi-category response)")
+            print(f"Generated Tokens: {token_count}")
+            print("Generation Time: N/A")
+            print("TPS: N/A")
+
+            return answer, combined_results, metrics
+
+    # ==================================================
+    # 2. 如果不是 multi-category，就走原本流程
+    # ==================================================
+
     has_variant = query_has_variant(query)
 
-    # 每個型號取最相關的一筆
     results = retrieve(
         query,
         top_k=1,
@@ -249,7 +521,8 @@ def answer_question(query):
         )
 
     # ==================================================
-    # 新增：deterministic structured response
+    # 3. 如果 Python 已確認不同型號規格不同
+    #    直接使用 deterministic structured response
     # ==================================================
     if forced_answer is not None:
 
@@ -286,7 +559,7 @@ def answer_question(query):
         return answer, results, metrics
 
     # ==================================================
-    # 下面開始全部是你原本的 LLM generation
+    # 4. 一般問題走 LLM generation
     # ==================================================
 
     response_language = get_response_language(query)
@@ -443,7 +716,6 @@ Question:
     }
 
     return answer, results, metrics
-
 
 if __name__ == "__main__":
 
