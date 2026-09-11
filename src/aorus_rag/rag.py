@@ -501,11 +501,21 @@ def answer_question(query):
             for result in results
         )
 
+        # ==================================================
+        # 情況 1：分數太低，視為與產品規格無關
+        # ==================================================
         if best_score < 0.35:
+
             if get_response_language(query) == "zh":
-                answer = "抱歉，我無法從產品規格中找到與這個問題相關的資訊。"
+                answer = (
+                    "抱歉，我無法從產品規格中找到"
+                    "與這個問題相關的資訊。"
+                )
             else:
-                answer = "Sorry, I could not find relevant information in the product specifications."
+                answer = (
+                    "Sorry, I could not find relevant information "
+                    "in the product specifications."
+                )
 
             metrics = {
                 "ttft": 0.0,
@@ -521,6 +531,104 @@ def answer_question(query):
             print()
             print("=== Performance ===")
             print("TTFT: N/A (low-confidence retrieval)")
+            print("Generated Tokens: 0")
+            print("Generation Time: N/A")
+            print("TPS: N/A")
+
+            return answer, results, metrics
+
+        # ==================================================
+        # 情況 2：有一些相關性，但問題沒有明確 category
+        # 視為 ambiguous query
+        # ==================================================
+        clean_query = re.sub(
+            r"[^\w\u4e00-\u9fff]+",
+            "",
+            query.strip(),
+        )
+
+        english_word_count = len(
+            re.findall(r"[A-Za-z]+", query)
+        )
+
+        is_short_ambiguous_query = (
+            len(detected_categories) == 0
+            and (
+                len(clean_query) <= 4
+                or (
+                    english_word_count > 0
+                    and english_word_count <= 2
+                )
+            )
+        )
+
+        if (
+            is_short_ambiguous_query
+            or (
+                best_score < 0.50
+                and len(detected_categories) == 0
+            )
+        ):
+            if get_response_language(query) == "zh":
+                answer = (
+                    "你的問題比較模糊，請再指定想查詢的規格，"
+                    "例如處理器、顯示晶片、記憶體、電池、"
+                    "螢幕或連接埠。"
+                )
+            else:
+                answer = (
+                    "Your question is ambiguous. "
+                    "Please specify the specification you want to check, "
+                    "such as CPU, GPU, memory, battery, display, or ports."
+                )
+
+            metrics = {
+                "ttft": 0.0,
+                "tps": 0.0,
+                "generated_tokens": 0,
+                "generation_time": 0.0,
+            }
+
+            print()
+            print("=== Answer ===")
+            print(answer)
+
+            print()
+            print("=== Performance ===")
+            print("TTFT: N/A (ambiguous query)")
+            print("Generated Tokens: 0")
+            print("Generation Time: N/A")
+            print("TPS: N/A")
+
+            return answer, results, metrics
+
+            if get_response_language(query) == "zh":
+                answer = (
+                    "你的問題比較模糊，請再指定想查詢的規格，"
+                    "例如處理器、顯示晶片、記憶體、電池、"
+                    "螢幕或連接埠。"
+                )
+            else:
+                answer = (
+                    "Your question is ambiguous. "
+                    "Please specify the specification you want to check, "
+                    "such as CPU, GPU, memory, battery, display, or ports."
+                )
+
+            metrics = {
+                "ttft": 0.0,
+                "tps": 0.0,
+                "generated_tokens": 0,
+                "generation_time": 0.0,
+            }
+
+            print()
+            print("=== Answer ===")
+            print(answer)
+
+            print()
+            print("=== Performance ===")
+            print("TTFT: N/A (ambiguous query)")
             print("Generated Tokens: 0")
             print("Generation Time: N/A")
             print("TPS: N/A")
