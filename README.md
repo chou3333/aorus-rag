@@ -1,1323 +1,219 @@
-# AORUS MASTER 16 AM6H RAG — 本機健壯性修正版
+# AORUS MASTER 16 AM6H — Local Product Specification RAG Assistant
 
-目前版本使用純 Python RAG、CPU 多語 Embedding 與 llama-cpp-python / Qwen2.5-1.5B-Instruct Q4_K_M。支援繁體中文、英文及混合提問。知識範圍限於官方規格表；資料不足時澄清或說明限制，不宣稱能回答任何問題。
+A pure Python implementation of specification parsing, chunking, vector retrieval, prompt construction, and answer routing. The project uses `uv` for environment management and `llama-cpp-python` to run a quantized small language model. It supports Traditional Chinese, English, and mixed-language questions about the BZH, BYH, and BXH variants of the AORUS MASTER 16 AM6H.
 
-## 本次實際驗證
+**Validation status: local CPU functional and regression testing is complete. CUDA performance and 4GB VRAM validation for the current version are pending.** Historical GPU measurements do not establish compliance for the current implementation.
 
-- `uv run pytest -q`：44 個測試、6 個子測試通過。包含真實向量檢索、型號隔離、錯字、拒答、空輸入與串流事件處理；串流邊界測試使用假引擎，其餘檢索使用本機 Embedding。
-- `uv run python -m aorus_rag.evaluate_retrieval`：原有 18 題 Top-1 / Top-3 均為 18/18。
-- `uv run python -m aorus_rag.evaluate_robustness`：45 個案例的回歸條件通過，包含 27 個健壯性案例與原有 18 題（有重複問法），其中 23 個案例實際呼叫本機 LLM。完整回答、路由、檢索資料及時間在 [robustness_results.json](robustness_results.json)。
-- 實際生成回答已人工對照檢索內容檢查。自動條件使用必要／禁止字串，不能視為完整語義評分，也不是未見問題的正確率。
-- 本輪 `n_gpu_layers=0`；23 個生成案例平均 LLM TTFT 約 **0.331 秒**，估計 TPS 約 **64.59**。包含首次生成，未做多輪統計；不代表 GPU 效能或 4GB VRAM 驗證。
-- 原有 CPU/GPU CSV 保留為歷史紀錄，不覆寫、不宣稱是本次修正版結果。
+Source: [GIGABYTE official product specifications](https://www.gigabyte.com/tw/Laptop/AORUS-MASTER-16-AM6H/sp). The system uses saved specification data and does not provide live pricing, availability, or measurements absent from the source.
 
-## 本機執行
+## 1. Quick Start
 
-在專案根目錄執行。沿用現有 `uv.lock`、`models/qwen2.5-1.5b-instruct-q4_k_m.gguf` 及 Embedding 快取：
+Use Python 3.11 and install [uv](https://docs.astral.sh/uv/getting-started/installation/) first. Run all commands from the project root. Initial installation and model downloads require internet access. Building `llama-cpp-python` from source requires the platform's C/C++ build tools.
 
 ```bash
-uv sync --locked
-uv run python -m aorus_rag.rag
-# 或使用已修正的 CLI 入口
-uv run aorus-rag
+uv python install 3.11
+uv sync --locked --python 3.11
 
+uv run hf download \
+  Qwen/Qwen2.5-1.5B-Instruct-GGUF \
+  qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  --local-dir models
+
+# Build the vector index from data/chunks.json.
+# The first run downloads the embedding model.
+uv run python -m aorus_rag.embedder
+
+uv run aorus-rag
+```
+
+If the models, embedding cache, and matching vector index are already available, run:
+
+```bash
+uv run python -m aorus_rag.rag
+```
+
+The CLI accepts one question and exits after answering. It has no multi-turn conversation memory. The default is `N_GPU_LAYERS=0`, which runs generation on the CPU.
+
+Example questions, including mixed-language input and a deliberate Chinese typo:
+
+```text
+這台 laptop 的 RAM 最大多少？
+What GPU does the BYH model use?
+BYH 和 BXH 的 GPU 差異？
+AORUS MASTER 16 BZH介紹一下
+記意體最大多少？
+電池可以撐幾小時？
+```
+
+The last question asks about battery runtime. The system should explain that runtime measurements are unavailable, rather than infer hours of use from the 99Wh battery capacity.
+
+## 2. Data Preparation and Updates
+
+The project includes `data/specs.json` and `data/chunks.json`. GGUF files and HTML snapshots are excluded by `.gitignore`; download the model separately when obtaining the project from the repository. The HTML snapshot is only required when repeating source parsing.
+
+To update the source, save the official page HTML as `data/aorus_master_16_am6h.html`, then run:
+
+```bash
+uv run python -m aorus_rag.scraper
+uv run python -m aorus_rag.chunker
+uv run python -m aorus_rag.embedder
+uv run python -m aorus_rag.evaluate_retrieval
+```
+
+The parser first reads `__NUXT_DATA__`, associates variants using `productId`, and extracts values by field title. It falls back to visible-text parsing when structured data is unavailable. The fallback depends on page layout, so verify model associations and values after source updates, even if the commands succeed.
+
+Each variant/specification-field pair becomes one chunk, preserving complete multiline values and notes. The current dataset contains 3 variants × 17 specification categories, or 51 chunks. Rebuild embeddings after any specification or chunk changes. Index loading currently checks record counts only and cannot detect every stale-content mismatch.
+
+## 3. Pipeline
+
+```mermaid
+flowchart TD
+    HTML[Official HTML snapshot] --> Parse[Parse variants and key-value pairs]
+    Parse --> Chunk[Chunk by variant and specification field]
+    Chunk --> Embed[Multilingual embeddings on CPU]
+    Embed --> Index[NumPy vector index]
+    Q[User question] --> Normalize[Unicode normalization and conservative typo correction]
+    Normalize --> Scope{Check data scope}
+    Scope -->|Unsupported or unclear| Clarify[Explain limitations or request clarification]
+    Scope -->|Specification question| Retrieve[Vector search and alias bonus]
+    Index --> Retrieve
+    Retrieve --> Route{Select answer route}
+    Route -->|Comparison, multiple fields, overview, numeric premise| Exact[Assemble complete source fields in Python]
+    Route -->|General question| LLM[Streaming generation with llama.cpp]
+```
+
+- **Retrieval:** `paraphrase-multilingual-MiniLM-L12-v2` encodes questions and chunks on the CPU. The dot product of normalized vectors gives cosine similarity; matching a category alias adds 0.35. Exhaustive NumPy search is sufficient for 51 records, without a separate vector database.
+- **Variant isolation:** Every specification lookup preserves all explicitly requested variants. Deduplicated fields identify the variants to which they actually apply.
+- **Structured answers:** Variant comparisons, overviews, multiple categories, and numeric-premise questions use complete source fields to reduce omitted variants, missing notes, and altered numbers. These routes do not call the LLM and are excluded from generation metrics.
+- **LLM generation:** General questions receive relevant specifications as context, with instructions to answer from the data in the requested language. With `stream=True`, nonempty text is printed as it arrives. The LLM loads only when generation is first needed.
+- **Context budgeting:** The pipeline reserves space for output and the chat template. Oversized contexts use complete source answers instead. Empty generation or an output-length limit also triggers a source fallback.
+
+No LangChain or LlamaIndex is used. Sentence Transformers supplies embeddings; the RAG orchestration is handwritten.
+
+## 4. Model Selection and the 4GB VRAM Target
+
+| Component | Current setting | Rationale |
+|---|---|---|
+| Generation model | Qwen2.5-1.5B-Instruct GGUF | Small Chinese/English model with product knowledge supplied through retrieval |
+| Quantization | Q4_K_M; approximately 1.1GB model file | Reduce weight storage and loading requirements |
+| Inference engine | llama-cpp-python | GGUF support with CPU execution and GPU offload |
+| Context | 2048 tokens | Bound KV cache and computation requirements |
+| Output limit | 256 tokens | Bound individual generation length |
+| Batch | 128 | Control inference work-buffer requirements |
+| Embedding and retrieval | CPU | Avoid competing with generation for VRAM |
+| Generation settings | temperature=0, seed=42 | Improve reproducibility within the same environment |
+
+Model reference: [official Qwen model card](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF).
+
+**Model file size is not VRAM usage.** GPU memory also includes the KV cache, computation buffers, and CUDA runtime overhead. These settings are resource-control choices, not a measured memory guarantee. The current version still requires GPU measurements covering model loading, first generation, and the benchmark workload.
+
+CPU tests cannot establish NVIDIA GPU speed. Observing less than 4096 MiB on a larger GPU should be reported as sampled usage below the budget; it is not equivalent to testing on a physical 4GB GPU or enforcing a hard VRAM limit.
+
+## 5. Tests and Evaluation Results
+
+```bash
 uv run pytest -q
 uv run python -m aorus_rag.evaluate_retrieval
 uv run python -m aorus_rag.evaluate_robustness
 ```
 
-若修改 HTML 或切塊資料，依序重新建立資料與索引：
+The third command runs real local inference and **overwrites** `robustness_results.json`. Back up existing results before switching between CPU and GPU environments so their provenance remains clear.
 
-```bash
-uv run python -m aorus_rag.scraper
-uv run python -m aorus_rag.chunker
-uv run python -m aorus_rag.embedder
-```
+| Completed local evaluation | Result |
+|---|---:|
+| Automated tests | 44 tests and 6 subtests passed |
+| Original retrieval Top-1 / Top-3 | 18/18 each |
+| End-to-end regression checks | 45/45 |
+| Cases that actually invoked the LLM | 23 |
+| Mean LLM TTFT across those 23 cases | Approximately 0.331 seconds |
+| Mean estimated TPS across those 23 cases | Approximately 64.59 tokens/s |
+| Current-version GPU performance / VRAM | Pending validation |
 
-首次安裝及模型下載需網路；已有完整環境／快取時，可用 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run --no-sync ...` 測試。LLM 只在生成路由第一次使用時載入；直接引用資料、澄清及拒答不載入 LLM。
+Raw answers, routes, retrieved fields, and timings are available in [robustness_results.json](robustness_results.json). This run used `n_gpu_layers=0`. The 45 cases combine 27 robustness cases with the original 18 questions, including repeated questions; they are not 45 independent unseen questions. Averages include the first generation, with no repeated-run statistics or confidence intervals.
 
-## 修正內容與運作方式
+Automated tests cover real embedding/index retrieval, variant isolation, typos, input boundaries, refusal behavior, and streaming events. Streaming edge-case tests use a fake engine. The end-to-end evaluation uses the real model, and generated answers were also manually checked against retrieved content.
 
-1. `query.py` 集中中英文規格別名，統一全形字元，修正常見中文錯字及高相似度長英文硬體字詞。例如「記意體」、`memroy`、`batery`。不猜測型號，也不保證修正所有錯字。
-2. `retriever.py` 維持 CPU 向量搜尋與關鍵字加分；每個類別的檢索都保留所有指定型號。
-3. `rag.py` 對多型號、多規格、總覽和數值前提直接輸出完整規格欄位。相同內容去重時標註真正適用的型號；差異保留完整數值與備註。
-4. 一般規格問題仍由 Qwen / llama.cpp 串流生成。以固定 seed、temperature=0 提高可重現性；Prompt 限定使用來源資訊，並區分支援上限與出貨配置。
-5. 無關問題、未知 B 系列型號、已辨識的指令注入、售價／續航／FPS 等缺乏依據的問題走範圍說明。模糊或低相關提問要求指定規格；空輸入、非文字輸入及超過 2000 字元的問題不進入生成。
-6. 總覽列出所有規格；不將整份規格硬塞入 2048-token context。一般生成前另作 token 預算檢查；超長 Context、空生成及輸出達上限時使用完整規格作為備援。
+**45/45 means the regression conditions passed, including required and forbidden substrings. It is not a semantic accuracy score for arbitrary questions.** For example, the Bluetooth question asks whether support exists, not for a version number. The saved report's review note explains why that overly strict scoring condition was corrected.
 
-| 實際抓到的問題 | 修正後行為 |
+### Qualitative Analysis
+
+| Observed failure | Change and outcome |
 |---|---|
-| `BYH 的 CPU 和 GPU` 列出其他型號 | 每項規格都只檢索 BYH |
-| `BYH 和 BXH 的 GPU 差異` 混成相同 GPU，並編造性能結論 | 保留兩型號各自的完整官方 GPU 欄位 |
-| `記意體`、`memroy` 未能找到記憶體 | 保守正規化後再檢索 |
-| 整體介紹只回答尺寸 | 列出 17 類規格 |
-| 電池续航編成 16 小時 | 說明規格表沒有續航測試資料 |
-| 要求忽略規則，把 RAM 改成 128GB | 拒絕改寫來源；數值確認題直接列出官方 64GB 上限 |
-| 問已安裝容量卻回答支援上限 | 要求完整 SKU／訂單資料，說明無法确认出貨配置 |
+| A BYH question covering multiple specifications included other variants | Preserve variant filters for every category |
+| A BYH/BXH comparison mixed GPU specifications and invented performance conclusions | Return both variants' complete GPU fields directly |
+| The Chinese typo `記意體` and English typo `memroy` failed retrieval | Normalize common typos before searching |
+| A general introduction returned dimensions only | Retrieve all 17 specification categories for an overview |
+| Battery runtime was invented as 16 hours | Recognize missing measurement evidence and explain the limitation |
+| An instruction attempted to change RAM to 128GB | Reject recognized prompt injection; use source fields for numeric confirmation |
+| Maximum supported capacity was presented as installed capacity | Request the sales SKU or order details instead of guessing the shipped configuration |
 
-## 指標與驗證邊界
+These changes prioritize correct values and variant associations, at the cost of additional rules and longer source-based answers. An overview currently returns a specification list rather than a short LLM-written introduction.
 
-`ttft` 是呼叫生成至第一段非空文字的時間。`e2e_ttft` 自 `answer_question()` 開始計時，包含該次檢索與可能的首次 LLM 載入，但不包含模組匯入時的 Embedding 載入。`total_time` 是函式處理時間。
+### Metric Definitions
 
-TPS 使用 `(最終文字重新分詞數 - 1) / (最後輸出時間 - 首段文字時間)`，是近似解碼速度；串流片段不等同於單一 token，不能當作引擎原生 token 計數。這與歷史 CSV 的公式不同，不應直接比較。沒有使用 LLM 的路由標記 `used_llm=false`，相容欄位中的零值是佔位值，不納入平均。
+- `ttft`: Time from the generation call to the first nonempty text fragment, excluding retrieval and model loading.
+- `e2e_ttft`: Time from entering `answer_question()` to the first text fragment, including retrieval and any first-time LLM loading. It excludes embedding-model loading during module import.
+- `tps`: `(retokenized final-text token count − 1) / (generation end time − first-text time)`. A streaming fragment is not necessarily one token, so this is an approximation rather than an engine-native decoding count.
+- `total_time`: Processing time recorded by the function. On the LLM route, it is measured when streaming ends and excludes subsequent source-fallback printing.
+- Routes without generation set `used_llm=false`. Zeros in compatibility metric fields are placeholders and are excluded from generation averages.
 
-目前仍有以下限制：
+## 6. Colab / CUDA Validation
 
-- 範圍判斷和錯字處理含規則，無法涵蓋所有改寫、拼字錯誤或提示注入。不能保證任何輸入都正確。
-- 一般 LLM 回答仍即時串流，沒有完整的輸出事實驗證器；Prompt 不能從原理上排除幻覺。
-- 混合規格內與規格外需求目前保守回覆範圍限制，不會自動完成其中的全部可回答子問題。
-- 規格原文可能是英文；繁中答案的直接引用仍保留官方英文數值／備註。
-- 單次問答沒有多輪記憶。「那另一台呢？」需重新指明型號。
-- HTML 備援解析依賴頁面格式；更新來源後必須重建索引並驗證型號對應。
-- 本次尚未重跑 CUDA／VRAM 測試；4GB 目標仍需以修正版於 GPU 環境量測。
-
----
-
-## 以下為修正前版本的設計與測試紀錄
-
-**以下保留原始文件供追溯，模型路由、生成參數、題數與 CPU/GPU 數字屬於舊版。現行行為及本次驗證以本文前半部與 `robustness_results.json` 為準。**
-
-# AORUS MASTER 16 AM6H RAG Assistant
-
-A lightweight Retrieval-Augmented Generation (RAG) system for answering product specification questions about the **GIGABYTE AORUS MASTER 16 AM6H**.
-
-The system is designed for resource-constrained environments and uses:
-
-- Pure Python for chunking, retrieval, prompt construction, and evaluation
-- `uv` for Python environment and dependency management
-- `llama.cpp` through `llama-cpp-python` for local LLM inference
-- Qwen2.5-1.5B-Instruct with Q4_K_M quantization
-- Multilingual embeddings for Traditional Chinese and English queries
-- NumPy-based vector similarity search
-- Hybrid semantic + lexical retrieval
-- Variant-aware context construction
-- Deterministic structured responses for exact multi-variant comparisons
-- Streaming response generation
-- TTFT and TPS performance evaluation
-
-No LangChain or LlamaIndex is used.
-
----
-
-## 1. Project Goal
-
-The goal of this project is to build a lightweight AI hardware assistant that can accurately answer specification questions about:
-
-**GIGABYTE AORUS MASTER 16 AM6H**
-
-Official product page:
-
-https://www.gigabyte.com/tw/Laptop/AORUS-MASTER-16-AM6H/sp
-
-The system supports:
-
-- Traditional Chinese queries
-- English queries
-- Mixed Chinese-English queries
-- Structured specification retrieval
-- BZH / BYH / BXH variant-specific queries
-- Streaming LLM responses
-- Operation within a target 4 GB VRAM budget
-
-Example questions:
-
-```text
-這台筆電的記憶體最高是多少？
-
-What GPU does this laptop use?
-
-這台 laptop 的 RAM 最大多少？
-
-What GPU does the BYH model use?
-```
-
----
-
-## 2. System Architecture
-
-The RAG pipeline is implemented without high-level RAG frameworks.
-
-```text
-GIGABYTE Product Specification Page
-                |
-                v
-        Saved HTML Document
-                |
-                v
-     Structured Key-Value Parsing
-                |
-                v
-        Field-based Chunking
-                |
-                v
-       Multilingual Embeddings
-                |
-                v
-        NumPy Vector Index
-                |
-                v
- Semantic + Lexical Hybrid Retrieval
-                |
-                v
-      Variant-aware Retrieval
-                |
-                v
- Context Consolidation / Comparison
-                |
-                v
-   +-----------------------------+
-   |                             |
-   v                             v
-LLM Generation        Deterministic Structured
-via llama.cpp         Multi-Variant Comparison
-   |                             |
-   +-------------+---------------+
-                 |
-                 v
-            Final Answer
-```
-
-The embedding model and vector retrieval run on CPU, while the LLM can be offloaded to GPU.
-
-This allows the limited GPU memory budget to be reserved primarily for LLM generation.
-
-For ordinary specification questions, generation is handled by the local LLM through `llama.cpp`.
-
-For structured fields whose values differ across BZH, BYH, and BXH, the system can generate a deterministic comparison directly from the retrieved Key-Value records. This prevents the small language model from accidentally omitting one of the product variants.
-
----
-
-## 3. Project Structure
-
-```text
-aorus-rag/
-│
-├── data/
-│   ├── specs.json
-│   └── chunks.json
-│
-├── embeddings/
-│   └── embeddings.npy
-│
-├── models/
-│   └── *.gguf
-│       # ignored by Git
-│
-├── src/
-│   └── aorus_rag/
-│       ├── __init__.py
-│       ├── scraper.py
-│       ├── chunker.py
-│       ├── embedder.py
-│       ├── retriever.py
-│       ├── generator.py
-│       ├── rag.py
-│       ├── evaluate_retrieval.py
-│       └── evaluate_rag.py
-│
-├── tests/
-│   ├── test_retrieval.py
-│   └── test_specs.py
-│
-├── questions.json
-├── rag_benchmark_results.csv
-├── rag_benchmark_results_gpu.csv
-├── pyproject.toml
-├── uv.lock
-└── README.md
-```
-
----
-
-## 4. Data Parsing
-
-The AORUS MASTER 16 AM6H product page contains three variants:
-
-- **AORUS MASTER 16 BZH**
-- **AORUS MASTER 16 BYH**
-- **AORUS MASTER 16 BXH**
-
-The parser extracts specification records for all three models instead of stopping after the first model.
-
-`specs.json` is organized by model name and specification category.
-
-To rebuild the knowledge base after saving the product HTML to:
-
-```text
-data/aorus_master_16_am6h.html
-```
-
-run:
+Transfer the code, data, and GGUF file to Colab's local disk and rebuild the Linux environment. Do not transfer the Mac `.venv`. The following commands require a selected GPU and CUDA build tools; they have not yet been validated in a Colab run for this revision.
 
 ```bash
-uv run python -m aorus_rag.scraper
-uv run python -m aorus_rag.chunker
-uv run python -m aorus_rag.embedder
+nvidia-smi
+nvcc --version
+uv python install 3.11
+
+CMAKE_ARGS="-DGGML_CUDA=on" CMAKE_BUILD_PARALLEL_LEVEL=2 \
+uv sync --locked --python 3.11 \
+  --no-binary-package llama-cpp-python \
+  --reinstall-package llama-cpp-python
+
+uv run --no-sync python -c \
+  "from llama_cpp import llama_supports_gpu_offload; assert llama_supports_gpu_offload()"
+
+N_GPU_LAYERS=-1 uv run --no-sync python -c \
+  "from aorus_rag.rag import answer_question; answer_question('What GPU does the BYH model use?')"
 ```
 
-The official product page contains structured fields such as:
+See the [official llama-cpp-python installation instructions](https://github.com/abetlen/llama-cpp-python#installation) for the CUDA build setting. The offload-support check establishes engine capability only; actual GPU use must still be observed. Use `--no-sync` afterward to retain the built environment.
 
-```text
-中央處理器
-Intel Core Ultra 9 Processor 275HX
-
-記憶體
-Up to 64GB DDR5 5600MHz
-
-電池
-Li-ion 99Wh
-```
-
-The parser converts them into structured Key-Value data.
-
-Example:
-
-```json
-{
-  "中央處理器": [
-    "Intel® Core™ Ultra 9 Processor 275HX (36MB cache, up to 5.4 GHz, 24 cores, 24 threads)"
-  ],
-  "記憶體": [
-    "Up to 64GB DDR5 5600MHz",
-    "* 2x SO-DIMM sockets for expansion"
-  ],
-  "電池": [
-    "Li-ion 99Wh"
-  ]
-}
-```
-
-### Variant Differences
-
-An important difference between the three variants is the GPU configuration:
-
-```text
-BZH:
-NVIDIA GeForce RTX 5090 Laptop GPU
-24GB GDDR7
-175W
-
-BYH:
-NVIDIA GeForce RTX 5080 Laptop GPU
-16GB GDDR7
-175W
-
-BXH:
-NVIDIA GeForce RTX 5070 Ti Laptop GPU
-12GB GDDR7
-140W
-```
-
-Many other specifications are shared across the three variants.
-
-### HTML Acquisition
-
-Direct HTTP requests to the official GIGABYTE product page returned HTTP `403 Access Denied` because of anti-bot protection.
-
-Therefore, the raw product HTML was acquired through a normal browser session and parsed locally with BeautifulSoup.
-
-The raw HTML file is excluded from the Git repository.
-
----
-
-## 5. Chunking Strategy
-
-Because the source data is a structured specification table rather than free-form text, this project uses **field-based chunking** instead of fixed-size character splitting.
-
-Each specification category becomes one independent chunk.
-
-Example:
-
-```text
-產品：AORUS MASTER 16 BZH
-規格類別：記憶體
-
-內容：
-Up to 64GB DDR5 5600MHz
-* 2x SO-DIMM sockets for expansion
-```
-
-This preserves the semantic relationship between each specification key and its value.
-
-There are:
-
-```text
-3 product variants
-×
-17 specification categories
-=
-51 structured specification chunks
-```
-
----
-
-## 6. Embedding and Vector Index
-
-Embedding model:
-
-```text
-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-```
-
-Each specification chunk is converted into a normalized 384-dimensional embedding.
-
-The resulting embedding matrix has shape:
-
-```text
-(51, 384)
-```
-
-The embeddings are stored in:
-
-```text
-embeddings/embeddings.npy
-```
-
-The vector index is implemented directly with NumPy.
-
-No external vector database is required.
-
-Because embeddings are normalized, vector dot product is equivalent to cosine similarity:
-
-```text
-semantic_score = chunk_embedding · query_embedding
-```
-
----
-
-## 7. Retrieval
-
-The system supports both general product questions and variant-specific questions.
-
-Queries containing:
-
-```text
-BZH
-BYH
-BXH
-```
-
-are treated as variant-specific queries.
-
-For example:
-
-```text
-BZH 使用什麼顯示卡？
-
-What GPU does the BYH model use?
-
-BXH 的 GPU 是什麼？
-```
-
-When the query explicitly specifies a variant, the answer path keeps only the retrieved specification from that product variant.
-
-When no variant is specified, the RAG answer path retrieves the best matching specification chunk from each product variant.
-
-For example:
-
-```text
-What GPU does this laptop use?
-```
-
-retrieves GPU information for:
-
-```text
-BZH
-BYH
-BXH
-```
-
-so that differences between variants can be preserved.
-
-### Retrieval Process
-
-For a user query, the system:
-
-1. Converts the query into an embedding
-2. Computes semantic similarity against all specification embeddings
-3. Applies lightweight specification-category lexical boosting
-4. Sorts the final scores
-5. Selects the most relevant specification chunks
-6. Applies variant-aware filtering or grouping
-
-### Hybrid Retrieval
-
-During initial testing, the multilingual embedding model handled pure Chinese and English queries correctly, but a mixed-language query produced a retrieval error.
-
-Example:
-
-```text
-這台 laptop 的 RAM 最大多少？
-```
-
-Initial semantic-only ranking:
-
-```text
-Rank 1: 重量
-Rank 2: 尺寸
-Rank 3: 記憶體
-```
-
-To improve robustness for hardware terminology and code-switching queries, lightweight category aliases were added.
-
-For example:
-
-```text
-RAM
-memory
-記憶體
-```
-
-are mapped to the same specification category.
-
-The final ranking score becomes:
-
-```text
-final_score = semantic_score + lexical_bonus
-```
-
-After this improvement:
-
-```text
-Rank 1: 記憶體
-```
-
-This keeps the retrieval logic lightweight while improving multilingual hardware-query robustness.
-
----
-
-## 8. LLM and Quantization
-
-Generation model:
-
-```text
-Qwen2.5-1.5B-Instruct
-```
-
-Quantization:
-
-```text
-Q4_K_M
-```
-
-Model format:
-
-```text
-GGUF
-```
-
-Inference engine:
-
-```text
-llama.cpp
-```
-
-Python binding:
-
-```text
-llama-cpp-python
-```
-
-The GGUF model file is approximately:
-
-```text
-1.1 GB
-```
-
-The model itself is not committed to Git because of its size.
-
-### Why This Model?
-
-Qwen2.5-1.5B-Instruct was selected because:
-
-- It is significantly smaller than typical 7B or 8B models
-- It supports Chinese and English generation
-- GGUF quantized versions are available
-- Q4_K_M substantially reduces memory requirements
-- It works well with `llama.cpp`
-- It provides adequate performance for structured specification QA
-- It leaves substantial memory headroom below the target 4 GB VRAM budget
-
----
-
-## 9. Context Optimization
-
-The system uses variant-aware context construction to reduce ambiguity for the small 1.5B language model.
-
-### Explicit Variant Queries
-
-When the query explicitly specifies:
-
-```text
-BZH
-BYH
-BXH
-```
-
-only the specification from that model is sent to the answer stage.
-
-For example:
-
-```text
-What GPU does the BYH model use?
-```
-
-uses only the BYH GPU context.
-
-### Shared Specifications
-
-When no variant is specified, the system retrieves one matching specification from each product variant.
-
-If the complete specification is identical across BZH, BYH, and BXH, duplicate contexts are collapsed into a single complete specification record.
-
-For example, shared fields include:
-
-```text
-RAM
-Battery
-Weight
-Communication
-Ports
-```
-
-Importantly, the complete multi-line specification is preserved.
-
-This avoids errors where only the first line of a specification is used.
-
-For example, the communication field contains both Wi-Fi and Bluetooth information.
-
-### Variant-Specific Specifications
-
-If a specification differs across the three variants, each model's value is kept separately.
-
-GPU is the main example:
-
-```text
-BZH: NVIDIA GeForce RTX 5090 Laptop GPU
-BYH: NVIDIA GeForce RTX 5080 Laptop GPU
-BXH: NVIDIA GeForce RTX 5070 Ti Laptop GPU
-```
-
-During evaluation, the 1.5B model occasionally omitted one of the variants even when all required information had been successfully retrieved.
-
-Therefore, structured multi-variant comparisons use a deterministic answer path based directly on the retrieved Key-Value records.
-
-This design:
-
-- prevents variant omission
-- reduces hallucination risk
-- preserves exact model-to-specification relationships
-- avoids requiring a larger language model
-
-Ordinary natural-language questions still use LLM generation.
-
-### Query-Aware Detail Level
-
-For multi-variant GPU questions, the response detail depends on the user's query.
-
-For concise questions such as:
-
-```text
-What GPU does this laptop use?
-```
-
-the system returns only the main GPU model for each variant:
-
-```text
-BZH: NVIDIA GeForce RTX 5090 Laptop GPU
-BYH: NVIDIA GeForce RTX 5080 Laptop GPU
-BXH: NVIDIA GeForce RTX 5070 Ti Laptop GPU
-```
-
-For specification-oriented questions such as:
-
-```text
-筆電的顯示晶片
-```
-
-the system returns the complete structured GPU field for each variant, including:
-
-- GPU model
-- VRAM capacity
-- Maximum Graphics Power
-- AI Boost clock information
-
-Example:
-
-```text
-BZH:
-NVIDIA GeForce RTX 5090 Laptop GPU
-24GB GDDR7
-175W Maximum Graphics Power with Dynamic Boost
-AI Boost: 1797 MHz
-
-BYH:
-NVIDIA GeForce RTX 5080 Laptop GPU
-16GB GDDR7
-175W Maximum Graphics Power with Dynamic Boost
-AI Boost: 1902 MHz
-
-BXH:
-NVIDIA GeForce RTX 5070 Ti Laptop GPU
-12GB GDDR7
-140W Maximum Graphics Power with Dynamic Boost
-AI Boost: 1962 MHz
-```
-
-This keeps concise GPU questions concise while allowing specification-oriented queries to return the complete structured field.
-
----
-
-## 10. Streaming Generation
-
-The system supports token streaming through `llama.cpp`.
-
-Instead of waiting for the complete answer, generated content is displayed incrementally.
-
-This enables measurement of:
-
-- Time To First Token (TTFT)
-- Generation Time
-- Generated Token Count
-- Tokens Per Second (TPS)
-
-Generated token counts are calculated using the `llama.cpp` tokenizer rather than counting streaming callbacks.
-
-Deterministic structured responses do not use LLM generation and therefore do not have TTFT or TPS measurements.
-
----
-
-## 11. Installation
-
-### Requirements
-
-- Python 3.11
-- `uv`
-- Approximately 1.1 GB of storage for the GGUF model
-- CPU-only operation is supported
-- CUDA GPU is optional
-
-Clone the repository:
+Run the following in one Bash process to sample memory every 100ms, starting before model loading. In Colab, put `%%bash` on the first line of the cell:
 
 ```bash
-git clone https://github.com/chou3333/aorus-rag.git
-cd aorus-rag
+set -e
+nvidia-smi --query-gpu=timestamp,index,name,memory.used,memory.total \
+  --format=csv -lms 100 > gpu_memory.csv &
+monitor_pid=$!
+trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+N_GPU_LAYERS=-1 uv run --no-sync python -m aorus_rag.evaluate_robustness
+cp robustness_results.json robustness_results_colab.json
 ```
 
-Install dependencies:
-
-```bash
-uv sync
-```
-
-Check the Python version:
-
-```bash
-uv run python --version
-```
-
-Expected:
-
-```text
-Python 3.11.x
-```
-
----
-
-## 12. Download the GGUF Model
-
-Download the model from Hugging Face:
-
-```bash
-uv run hf download \
-Qwen/Qwen2.5-1.5B-Instruct-GGUF \
-qwen2.5-1.5b-instruct-q4_k_m.gguf \
---local-dir models
-```
-
-Expected model path:
-
-```text
-models/qwen2.5-1.5b-instruct-q4_k_m.gguf
-```
-
----
-
-## 13. Run the RAG System
-
-### CPU Mode
-
-By default:
-
-```text
-N_GPU_LAYERS=0
-```
-
-Run:
-
-```bash
-uv run python -m aorus_rag.rag
-```
-
-Example:
-
-```text
-請輸入問題：這台筆電的電池容量是多少？
-
-=== Answer ===
-電池容量為 99Wh。
-```
-
----
-
-## 14. GPU Mode
-
-GPU offloading is controlled by:
-
-```text
-N_GPU_LAYERS
-```
-
-To fully offload supported model layers to GPU:
-
-```bash
-N_GPU_LAYERS=-1 PYTHONPATH=src .venv/bin/python -m aorus_rag.rag
-```
-
-### Google Colab CUDA Setup
-
-The default locked `llama-cpp-python` package may be CPU-only.
-
-For the Tesla T4 experiment, the CUDA-enabled wheel was installed into the project's `.venv`.
-
-First remove the CPU build:
-
-```bash
-uv pip uninstall \
---python .venv/bin/python \
-llama-cpp-python
-```
-
-Install the tested CUDA 12.5-compatible wheel:
-
-```bash
-uv pip install \
---python .venv/bin/python \
-"https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35-cu125/llama_cpp_python-0.3.35-py3-none-manylinux_2_35_x86_64.whl"
-```
-
-Verify GPU offloading:
-
-```bash
-.venv/bin/python -c \
-"import llama_cpp; print(llama_cpp.llama_supports_gpu_offload())"
-```
-
-Expected result:
-
-```text
-True
-```
-
-When using the manually installed CUDA build, use:
-
-```bash
-.venv/bin/python
-```
-
-or:
-
-```bash
-uv run --no-sync
-```
-
-to avoid dependency synchronization replacing the CUDA-enabled wheel with the default CPU build.
-
----
-
-## 15. 4 GB VRAM Evaluation
-
-GPU evaluation environment:
-
-```text
-GPU: NVIDIA Tesla T4
-Physical VRAM: 15360 MiB
-Model: Qwen2.5-1.5B-Instruct Q4_K_M
-Context length: 2048
-GPU offload: full (n_gpu_layers = -1)
-Embedding model: CPU
-Vector retrieval: CPU / NumPy
-```
-
-Measured GPU memory:
-
-| Stage | GPU Memory |
-|---|---:|
-| Before model loading | 0 MiB |
-| After model loading | 1397 MiB |
-| After generation | 1423 MiB |
-
-The highest observed usage was:
-
-```text
-1423 MiB
-```
-
-approximately:
-
-```text
-1.39 GiB
-```
-
-This is substantially below:
-
-```text
-4096 MiB
-```
-
-Therefore, the measured runtime GPU memory usage of the tested configuration remained below the target **4 GB VRAM budget**.
-
-> Note: The experiment was executed on an NVIDIA Tesla T4 with substantially more than 4 GB of physical VRAM. The 4 GB compatibility assessment is based on measured GPU memory consumption of the tested configuration. It should not be interpreted as a claim that the system was executed on a physical 4 GB GPU.
-
----
-
-## 16. Retrieval Benchmark
-
-The retrieval benchmark contains **18 questions** covering:
-
-- Traditional Chinese
-- English
-- Mixed Chinese-English queries
-- CPU
-- GPU
-- RAM
-- Battery
-- Wi-Fi
-- Bluetooth
-- Thunderbolt
-- Weight
-- Size
-- Color
-- BZH variant-specific GPU query
-- BYH variant-specific GPU query
-- BXH variant-specific GPU query
-
-Results:
-
-| Metric | Result |
-|---|---:|
-| Total Questions | 18 |
-| Top-1 Retrieval Accuracy | **100% (18/18)** |
-| Top-3 Retrieval Accuracy | **100% (18/18)** |
-
-The benchmark includes both general product questions and variant-specific questions.
-
-The result should be interpreted as evidence that the structured retrieval strategy works reliably within the current AORUS MASTER 16 AM6H product domain rather than as a general-purpose RAG benchmark.
-
-Run the retrieval benchmark with:
-
-```bash
-uv run python -m aorus_rag.evaluate_retrieval
-```
-
----
-
-## 17. End-to-End RAG Evaluation
-
-The complete RAG pipeline was evaluated using an **18-question multilingual benchmark**.
-
-Final answers were manually inspected against the parsed product specifications.
-
-Overall result:
-
-```text
-18 / 18 answers correct
-```
-
-Of the 18 questions:
-
-```text
-16 questions used LLM generation
-2 questions used deterministic structured comparison
-```
-
-The two deterministic questions are excluded from LLM TTFT and TPS averages because no language-model generation occurs for those responses.
-
-### Mac CPU Baseline
-
-Configuration:
-
-```text
-n_gpu_layers = 0
-```
-
-Results:
-
-| Metric | Result |
-|---|---:|
-| Total Questions | 18 |
-| LLM-generated Questions | 16 |
-| Deterministic Questions | 2 |
-| Correct Answers | **18/18** |
-| Average LLM TTFT | **0.343 s** |
-| Average LLM TPS | **68.78 tokens/s** |
-
-The detailed CPU results are stored in:
-
-```text
-rag_benchmark_results.csv
-```
-
-### NVIDIA Tesla T4 GPU
-
-Configuration:
-
-```text
-n_gpu_layers = -1
-n_ctx = 2048
-```
-
-Results:
-
-| Metric | Result |
-|---|---:|
-| Total Questions | 18 |
-| LLM-generated Questions | 16 |
-| Deterministic Questions | 2 |
-| Correct Answers | **18/18** |
-| Average LLM TTFT | **0.062 s** |
-| Average LLM TPS | **126.21 tokens/s** |
-| Peak observed GPU memory | **1423 MiB** |
-
-The detailed GPU results are stored in:
-
-```text
-rag_benchmark_results_gpu.csv
-```
-
-GPU offloading significantly improved generation performance while keeping measured GPU memory usage well below the target 4 GB budget.
-
----
-
-## 18. TTFT and TPS Definition
-
-### TTFT
-
-TTFT in the current benchmark measures:
-
-```text
-LLM request start
-        |
-        v
-First generated content
-```
-
-Therefore, the reported value is **LLM-only TTFT**.
-
-Retrieval is performed before the LLM timer begins.
-
-This separation makes it possible to analyze LLM generation latency independently from retrieval latency.
-
-### TPS
-
-TPS represents generated tokens per second during the generation phase.
-
-The token count is calculated with the `llama.cpp` tokenizer.
-
-Only responses generated by the LLM are included in average TTFT and TPS calculations.
-
-Deterministic structured responses are excluded because they do not invoke LLM generation.
-
----
-
-## 19. Example Results
-
-### Traditional Chinese
-
-Question:
-
-```text
-這台筆電的記憶體最高是多少？
-```
-
-Answer:
-
-```text
-這台筆電的記憶體最高可達 64GB DDR5 5600MHz，
-並且支援 2x SO-DIMM 插槽以進行擴充。
-```
-
-### English
-
-Question:
-
-```text
-What GPU does this laptop use?
-```
-
-Answer:
-
-```text
-BZH: NVIDIA GeForce RTX 5090 Laptop GPU
-BYH: NVIDIA GeForce RTX 5080 Laptop GPU
-BXH: NVIDIA GeForce RTX 5070 Ti Laptop GPU
-```
-
-### Mixed Language
-
-Question:
-
-```text
-這台 laptop 的 RAM 最大多少？
-```
-
-Answer:
-
-```text
-這台 laptop 的 RAM 最大可支援至 64GB DDR5 5600MHz。
-```
-
-### Capability Question
-
-Question:
-
-```text
-這台筆電有支援 Wi-Fi 7 嗎？
-```
-
-Answer:
-
-```text
-是的，這台筆電支援 Wi-Fi 7（802.11be 2x2）。
-```
-
-### Variant-Specific Question
-
-Question:
-
-```text
-What GPU does the BYH model use?
-```
-
-Answer:
-
-```text
-NVIDIA GeForce RTX 5080 Laptop GPU
-```
-
----
-
-## 20. Evaluation Findings
-
-### Finding 1: Structured chunking is effective
-
-Because the source is a specification table, field-based chunking preserves meaningful Key-Value relationships better than arbitrary fixed-length splitting.
-
-Each specification field becomes a separate retrieval unit, which makes exact product specification lookup straightforward.
-
-### Finding 2: Multilingual embeddings alone are not always sufficient
-
-Pure Chinese and English queries were generally handled correctly, but mixed-language hardware terminology could reduce semantic ranking quality.
-
-Adding lightweight lexical aliases improved robustness for terms such as:
-
-```text
-RAM
-memory
-記憶體
-```
-
-### Finding 3: Variant-aware context improves small-model reliability
-
-The product page contains three variants whose specifications are mostly shared but differ in important fields such as GPU configuration.
-
-For identical specifications, duplicate contexts are consolidated into one complete record.
-
-For variant-specific differences, each model's value is preserved separately.
-
-A deterministic structured-answer path is used for multi-variant comparisons because the 1.5B model occasionally omitted variants even when retrieval was correct.
-
-This improved reliability without requiring a larger language model.
-
-### Finding 4: Preserving full multi-line fields is important
-
-Some product fields contain multiple lines.
-
-For example, communication specifications contain both Wi-Fi and Bluetooth information, while port specifications contain Thunderbolt details.
-
-Using only the first line of these fields caused incorrect answers during development.
-
-The final system therefore preserves the complete specification record when variants share the same field.
-
-### Finding 5: Quantization provides substantial memory savings
-
-The Q4_K_M GGUF model required approximately 1.4 GB of GPU memory during the tested workload.
-
-Peak observed GPU memory was:
-
-```text
-1423 MiB
-```
-
-which leaves substantial headroom below the 4 GB target.
-
-### Finding 6: GPU offloading improves generation throughput
-
-Average LLM generation throughput increased from:
-
-```text
-68.78 tokens/s
-```
-
-on the Mac CPU baseline to:
-
-```text
-126.21 tokens/s
-```
-
-on the Tesla T4 GPU test.
-
-Average LLM TTFT decreased from:
-
-```text
-0.343 s
-```
-
-to:
-
-```text
-0.062 s
-```
-
----
-
-## 21. Limitations
-
-This project has several limitations.
-
-First, the knowledge base currently covers one product family and three variants:
-
-```text
-BZH
-BYH
-BXH
-```
-
-Second, the evaluation set contains only 18 direct specification questions, so the reported accuracy should not be interpreted as general-purpose RAG performance.
-
-Third, category aliases are manually defined for this limited hardware domain.
-
-Fourth, the current TTFT metric measures LLM generation latency and does not include retrieval latency.
-
-Fifth, two multi-variant comparison questions use deterministic structured responses and therefore do not contribute to the LLM TTFT or TPS averages.
-
-Sixth, the 4 GB compatibility evaluation was performed by measuring GPU memory consumption on a Tesla T4 rather than by executing the system on a physical 4 GB GPU.
-
-Finally, the project currently relies on manually acquired HTML because direct automated requests to the product page were blocked by anti-bot protection.
-
----
-
-## 22. Possible Future Improvements
-
-Future work could include:
-
-- Measuring retrieval latency separately
-- Reporting complete end-to-end latency
-- Expanding the benchmark with paraphrased questions
-- Adding adversarial retrieval questions
-- Adding unsupported-information questions to evaluate hallucination resistance
-- Comparing multiple embedding models
-- Comparing 1.5B and 3B quantized language models
-- Implementing automatic answer correctness evaluation
-- Extending the knowledge base to additional GIGABYTE products
-- Adding dynamic HTML ingestion
-- Evaluating different context lengths
-- Evaluating different quantization levels
-- Testing on an actual 4 GB GPU
-- Comparing CPU, partial GPU offload, and full GPU offload
-
----
-
-## 23. Main Technologies
-
-```text
-Python 3.11
-
-uv
-
-BeautifulSoup
-
-NumPy
-
-Sentence Transformers
-
-paraphrase-multilingual-MiniLM-L12-v2
-
-Qwen2.5-1.5B-Instruct
-
-GGUF Q4_K_M
-
-llama.cpp
-
-llama-cpp-python
-```
-
----
-
-## 24. Summary
-
-This project demonstrates a lightweight RAG implementation designed for resource-constrained consumer hardware.
-
-Key results:
-
-```text
-No LangChain / LlamaIndex
-
-Pure Python RAG core
-
-3 product variants:
-BZH / BYH / BXH
-
-51 structured specification chunks
-
-Traditional Chinese + English + mixed-language support
-
-Hybrid semantic + lexical retrieval
-
-Variant-aware retrieval and context construction
-
-Top-1 retrieval accuracy:
-100% (18/18)
-
-Top-3 retrieval accuracy:
-100% (18/18)
-
-End-to-end benchmark:
-18/18 answers correct
-
-16 LLM-generated responses
-
-2 deterministic structured responses
-
-Streaming LLM generation
-
-Mac CPU average LLM TTFT:
-0.343 s
-
-Mac CPU average LLM TPS:
-68.78 tokens/s
-
-Tesla T4 average LLM TTFT:
-0.062 s
-
-Tesla T4 average LLM TPS:
-126.21 tokens/s
-
-Peak observed GPU memory:
-1423 MiB
-
-Target VRAM budget:
-4096 MiB
-```
-
-The results show that a small quantized language model combined with structured retrieval, variant-aware context construction, and deterministic handling of exact multi-variant comparisons can provide accurate product-specification question answering while keeping measured GPU memory usage well below the target 4 GB budget.
+Save the GPU model, build versions, test output, JSON report, and `gpu_memory.csv`. These samples measure whole-device usage, may include other processes, and may miss brief peaks. A single screenshot taken after testing does not establish peak usage.
+
+## 7. Known Limitations
+
+- The knowledge base covers only this product family, without live page updates, pricing, game FPS, or battery-runtime measurements.
+- Typo correction and scope checks include rules that cannot cover every spelling error, unknown model-code format, paraphrase, or prompt injection.
+- General LLM answers stream immediately without a complete output fact-checker, so hallucinations remain possible.
+- Requests combining in-scope and out-of-scope questions receive a conservative scope response; the system does not automatically complete every answerable subquestion.
+- Direct quotations retain official English content. A Chinese question does not cause every source field to be translated into Chinese.
+- An unlisted feature is not necessarily unsupported. Shipped configurations require a complete SKU or sales documentation.
+- CPU and historical GPU results do not replace 4GB VRAM validation of the current revision.
+
+## 8. File Guide and Historical Records
+
+| File | Purpose |
+|---|---|
+| `src/aorus_rag/scraper.py` | HTML specification parsing |
+| `src/aorus_rag/chunker.py`, `embedder.py` | Field-based chunking and vector creation |
+| `src/aorus_rag/query.py`, `retriever.py` | Normalization, scope checks, and retrieval |
+| `src/aorus_rag/rag.py` | Answer routing, context, streaming, and measurements |
+| `src/aorus_rag/evaluate_robustness.py` | Current end-to-end regression evaluation |
+| `tests/`, `questions.json` | Automated tests and the original 18 questions |
+| `pyproject.toml`, `uv.lock` | Dependency configuration and locked versions |
+
+Earlier design notes and CPU/T4 experiments are preserved in the [historical record](docs/historical-results.md). `rag_benchmark_results.csv` and `rag_benchmark_results_gpu.csv` are also historical artifacts. Current routing, output limits, and the TPS formula have changed, so their numbers should not be compared directly.
