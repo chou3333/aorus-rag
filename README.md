@@ -59,6 +59,8 @@ Embeddings and retrieval run on CPU.
 
 Normalized vectors are searched using NumPy dot products, which correspond to cosine similarity.
 
+Retrieval also applies a **0.35 bonus** when a query matches known specification-category aliases, improving Chinese, English, and mixed-language retrieval.
+
 ### Generation
 
 Generation model:
@@ -178,6 +180,27 @@ The observed peak of **1205 MiB** is below the **4 GiB target**.
 
 The benchmark was performed on a Tesla T4, which has more than 4GB of physical VRAM. Therefore, this result demonstrates observed usage below the 4GB budget rather than execution on a physical 4GB GPU.
 
+TTFT measures the time from the generation call to the first non-empty text fragment, excluding retrieval and model loading.
+
+TPS is estimated from the retokenized generated output after the first text fragment. Only LLM-generated cases are included in these averages.
+
+Raw GPU results are available in:
+
+- [`robustness_results_colab.json`](robustness_results_colab.json)
+- [`gpu_memory.csv`](gpu_memory.csv)
+
+### Reproducing GPU Evaluation
+
+For CUDA execution in Colab, install a CUDA-enabled `llama-cpp-python` build and run:
+
+```bash
+N_GPU_LAYERS=-1 \
+PYTHONPATH=src \
+.venv/bin/python -m aorus_rag.evaluate_robustness
+```
+
+GPU memory can be monitored with `nvidia-smi`.
+
 ---
 
 ## 5. Evaluation
@@ -218,6 +241,8 @@ Result:
 ```text
 Regression checks: 45/45
 ```
+
+> Note: `evaluate_robustness` overwrites `robustness_results.json`. Back up the file before rerunning if previous CPU or GPU results should be preserved.
 
 The robustness benchmark includes cases covering:
 
