@@ -1,3 +1,82 @@
+# AORUS MASTER 16 AM6H RAG — 本機健壯性修正版
+
+目前版本使用純 Python RAG、CPU 多語 Embedding 與 llama-cpp-python / Qwen2.5-1.5B-Instruct Q4_K_M。支援繁體中文、英文及混合提問。知識範圍限於官方規格表；資料不足時澄清或說明限制，不宣稱能回答任何問題。
+
+## 本次實際驗證
+
+- `uv run pytest -q`：44 個測試、6 個子測試通過。包含真實向量檢索、型號隔離、錯字、拒答、空輸入與串流事件處理；串流邊界測試使用假引擎，其餘檢索使用本機 Embedding。
+- `uv run python -m aorus_rag.evaluate_retrieval`：原有 18 題 Top-1 / Top-3 均為 18/18。
+- `uv run python -m aorus_rag.evaluate_robustness`：45 個案例的回歸條件通過，包含 27 個健壯性案例與原有 18 題（有重複問法），其中 23 個案例實際呼叫本機 LLM。完整回答、路由、檢索資料及時間在 [robustness_results.json](robustness_results.json)。
+- 實際生成回答已人工對照檢索內容檢查。自動條件使用必要／禁止字串，不能視為完整語義評分，也不是未見問題的正確率。
+- 本輪 `n_gpu_layers=0`；23 個生成案例平均 LLM TTFT 約 **0.331 秒**，估計 TPS 約 **64.59**。包含首次生成，未做多輪統計；不代表 GPU 效能或 4GB VRAM 驗證。
+- 原有 CPU/GPU CSV 保留為歷史紀錄，不覆寫、不宣稱是本次修正版結果。
+
+## 本機執行
+
+在專案根目錄執行。沿用現有 `uv.lock`、`models/qwen2.5-1.5b-instruct-q4_k_m.gguf` 及 Embedding 快取：
+
+```bash
+uv sync --locked
+uv run python -m aorus_rag.rag
+# 或使用已修正的 CLI 入口
+uv run aorus-rag
+
+uv run pytest -q
+uv run python -m aorus_rag.evaluate_retrieval
+uv run python -m aorus_rag.evaluate_robustness
+```
+
+若修改 HTML 或切塊資料，依序重新建立資料與索引：
+
+```bash
+uv run python -m aorus_rag.scraper
+uv run python -m aorus_rag.chunker
+uv run python -m aorus_rag.embedder
+```
+
+首次安裝及模型下載需網路；已有完整環境／快取時，可用 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run --no-sync ...` 測試。LLM 只在生成路由第一次使用時載入；直接引用資料、澄清及拒答不載入 LLM。
+
+## 修正內容與運作方式
+
+1. `query.py` 集中中英文規格別名，統一全形字元，修正常見中文錯字及高相似度長英文硬體字詞。例如「記意體」、`memroy`、`batery`。不猜測型號，也不保證修正所有錯字。
+2. `retriever.py` 維持 CPU 向量搜尋與關鍵字加分；每個類別的檢索都保留所有指定型號。
+3. `rag.py` 對多型號、多規格、總覽和數值前提直接輸出完整規格欄位。相同內容去重時標註真正適用的型號；差異保留完整數值與備註。
+4. 一般規格問題仍由 Qwen / llama.cpp 串流生成。以固定 seed、temperature=0 提高可重現性；Prompt 限定使用來源資訊，並區分支援上限與出貨配置。
+5. 無關問題、未知 B 系列型號、已辨識的指令注入、售價／續航／FPS 等缺乏依據的問題走範圍說明。模糊或低相關提問要求指定規格；空輸入、非文字輸入及超過 2000 字元的問題不進入生成。
+6. 總覽列出所有規格；不將整份規格硬塞入 2048-token context。一般生成前另作 token 預算檢查；超長 Context、空生成及輸出達上限時使用完整規格作為備援。
+
+| 實際抓到的問題 | 修正後行為 |
+|---|---|
+| `BYH 的 CPU 和 GPU` 列出其他型號 | 每項規格都只檢索 BYH |
+| `BYH 和 BXH 的 GPU 差異` 混成相同 GPU，並編造性能結論 | 保留兩型號各自的完整官方 GPU 欄位 |
+| `記意體`、`memroy` 未能找到記憶體 | 保守正規化後再檢索 |
+| 整體介紹只回答尺寸 | 列出 17 類規格 |
+| 電池续航編成 16 小時 | 說明規格表沒有續航測試資料 |
+| 要求忽略規則，把 RAM 改成 128GB | 拒絕改寫來源；數值確認題直接列出官方 64GB 上限 |
+| 問已安裝容量卻回答支援上限 | 要求完整 SKU／訂單資料，說明無法确认出貨配置 |
+
+## 指標與驗證邊界
+
+`ttft` 是呼叫生成至第一段非空文字的時間。`e2e_ttft` 自 `answer_question()` 開始計時，包含該次檢索與可能的首次 LLM 載入，但不包含模組匯入時的 Embedding 載入。`total_time` 是函式處理時間。
+
+TPS 使用 `(最終文字重新分詞數 - 1) / (最後輸出時間 - 首段文字時間)`，是近似解碼速度；串流片段不等同於單一 token，不能當作引擎原生 token 計數。這與歷史 CSV 的公式不同，不應直接比較。沒有使用 LLM 的路由標記 `used_llm=false`，相容欄位中的零值是佔位值，不納入平均。
+
+目前仍有以下限制：
+
+- 範圍判斷和錯字處理含規則，無法涵蓋所有改寫、拼字錯誤或提示注入。不能保證任何輸入都正確。
+- 一般 LLM 回答仍即時串流，沒有完整的輸出事實驗證器；Prompt 不能從原理上排除幻覺。
+- 混合規格內與規格外需求目前保守回覆範圍限制，不會自動完成其中的全部可回答子問題。
+- 規格原文可能是英文；繁中答案的直接引用仍保留官方英文數值／備註。
+- 單次問答沒有多輪記憶。「那另一台呢？」需重新指明型號。
+- HTML 備援解析依賴頁面格式；更新來源後必須重建索引並驗證型號對應。
+- 本次尚未重跑 CUDA／VRAM 測試；4GB 目標仍需以修正版於 GPU 環境量測。
+
+---
+
+## 以下為修正前版本的設計與測試紀錄
+
+**以下保留原始文件供追溯，模型路由、生成參數、題數與 CPU/GPU 數字屬於舊版。現行行為及本次驗證以本文前半部與 `robustness_results.json` 為準。**
+
 # AORUS MASTER 16 AM6H RAG Assistant
 
 A lightweight Retrieval-Augmented Generation (RAG) system for answering product specification questions about the **GIGABYTE AORUS MASTER 16 AM6H**.

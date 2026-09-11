@@ -1,2 +1,3 @@
 def main() -> None:
-    print("Hello from aorus-rag!")
+    from aorus_rag.rag import main as run
+    run()

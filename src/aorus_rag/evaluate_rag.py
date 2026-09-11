@@ -39,7 +39,7 @@ for index, item in enumerate(questions, start=1):
         for result in retrieval_results
     ]
 
-    top1_category = retrieved_categories[0]
+    top1_category = retrieved_categories[0] if retrieved_categories else None
 
     retrieval_correct = (
         top1_category == expected_category
@@ -47,7 +47,7 @@ for index, item in enumerate(questions, start=1):
 
     # 判斷是否真的有經過 LLM generation
     used_llm = (
-        metrics["generation_time"] > 0
+        metrics.get("used_llm", metrics["generation_time"] > 0)
     )
 
     row = {
