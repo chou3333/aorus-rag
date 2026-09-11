@@ -375,9 +375,9 @@ A: The BYH model uses the NVIDIA GeForce RTX 5080 Laptop GPU.
 
 ```text
 Q: 電池可以撐幾小時？
-```
 
-The official specification only provides a 99Wh battery capacity and does not provide measured battery runtime, so the system does not invent an estimated number of hours.
+A: 官方規格表未提供這項實測、價格或使用情境資訊，無法據此準確判定。
+   請提供相關測試或銷售資料；電池容量不等於續航時間，硬體規格也不等於遊戲 FPS。
 
 ### Invalid specification premise
 
@@ -385,7 +385,11 @@ The official specification only provides a 99Wh battery capacity and does not pr
 Q: BYH 的記憶體是不是 128GB？
 ```
 
-The system returns the official maximum specification of 64GB instead of accepting the incorrect premise.
+A: 官方規格如下（容量上限不代表每台出貨配置）：
+
+   記憶體 [BYH]:
+   Up to 64GB DDR5 5600MHz
+   * 2x SO-DIMM sockets for expansion
 
 ---
 
