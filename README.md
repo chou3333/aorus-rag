@@ -532,6 +532,61 @@ This design:
 
 Ordinary natural-language questions still use LLM generation.
 
+### Query-Aware Detail Level
+
+For multi-variant GPU questions, the response detail depends on the user's query.
+
+For concise questions such as:
+
+```text
+What GPU does this laptop use?
+```
+
+the system returns only the main GPU model for each variant:
+
+```text
+BZH: NVIDIA GeForce RTX 5090 Laptop GPU
+BYH: NVIDIA GeForce RTX 5080 Laptop GPU
+BXH: NVIDIA GeForce RTX 5070 Ti Laptop GPU
+```
+
+For specification-oriented questions such as:
+
+```text
+筆電的顯示晶片
+```
+
+the system returns the complete structured GPU field for each variant, including:
+
+- GPU model
+- VRAM capacity
+- Maximum Graphics Power
+- AI Boost clock information
+
+Example:
+
+```text
+BZH:
+NVIDIA GeForce RTX 5090 Laptop GPU
+24GB GDDR7
+175W Maximum Graphics Power with Dynamic Boost
+AI Boost: 1797 MHz
+
+BYH:
+NVIDIA GeForce RTX 5080 Laptop GPU
+16GB GDDR7
+175W Maximum Graphics Power with Dynamic Boost
+AI Boost: 1902 MHz
+
+BXH:
+NVIDIA GeForce RTX 5070 Ti Laptop GPU
+12GB GDDR7
+140W Maximum Graphics Power with Dynamic Boost
+AI Boost: 1962 MHz
+```
+
+This keeps concise GPU questions concise while allowing specification-oriented queries to return the complete structured field.
+
 ---
 
 ## 10. Streaming Generation
