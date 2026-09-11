@@ -191,15 +191,34 @@ Raw GPU results are available in:
 
 ### Reproducing GPU Evaluation
 
-The following setup was successfully used in Google Colab with an NVIDIA Tesla T4.
+The following procedure was successfully tested in Google Colab with an NVIDIA Tesla T4.
 
-Install project dependencies:
+First, verify that a GPU runtime is available:
+
+```bash
+nvidia-smi
+```
+
+Clone the repository and enter the project directory:
+
+```bash
+git clone https://github.com/chou3333/aorus-rag.git
+cd aorus-rag
+```
+
+Install `uv`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Install the project dependencies:
 
 ```bash
 uv sync
 ```
 
-Replace the default `llama-cpp-python` installation with the CUDA-enabled build used during validation:
+The default `llama-cpp-python` installation is then replaced with the CUDA-enabled wheel used during validation:
 
 ```bash
 uv pip uninstall --python .venv/bin/python llama-cpp-python
@@ -208,20 +227,20 @@ uv pip install --python .venv/bin/python \
   "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35-cu125/llama_cpp_python-0.3.35-py3-none-manylinux_2_35_x86_64.whl"
 ```
 
-Verify GPU offload support:
+Verify that GPU offloading is available:
 
 ```bash
 .venv/bin/python -c \
   "import llama_cpp; print('GPU offload support:', llama_cpp.llama_supports_gpu_offload())"
 ```
 
-Expected result:
+Expected output:
 
 ```text
 GPU offload support: True
 ```
 
-Download the GGUF model if it is not already available:
+Download the GGUF model:
 
 ```bash
 mkdir -p models
@@ -232,26 +251,52 @@ mkdir -p models
   --local-dir models
 ```
 
-Run the robustness benchmark with GPU offloading:
+A single GPU inference can be tested with:
 
 ```bash
 N_GPU_LAYERS=-1 \
 PYTHONPATH=src \
-.venv/bin/python -m aorus_rag.evaluate_robustness
+.venv/bin/python -m aorus_rag.rag
 ```
 
-To record GPU memory usage every 100 ms:
+For the full GPU robustness benchmark and VRAM measurement, run the following in one Colab cell. Put `%%bash` on the first line of the cell so that GPU monitoring starts before the benchmark and stops after it finishes:
 
 ```bash
+%%bash
+set -e
+
+rm -f gpu_memory.csv
+rm -f robustness_results_colab.json
+
 nvidia-smi \
   --query-gpu=timestamp,index,name,memory.used,memory.total \
   --format=csv \
   -lms 100 > gpu_memory.csv &
+
+monitor_pid=$!
+
+trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+
+N_GPU_LAYERS=-1 \
+PYTHONPATH=src \
+.venv/bin/python -m aorus_rag.evaluate_robustness
+
+cp robustness_results.json robustness_results_colab.json
+
+kill "$monitor_pid" 2>/dev/null || true
+wait "$monitor_pid" 2>/dev/null || true
+
+trap - EXIT
 ```
 
-After manually installing the CUDA-enabled `llama-cpp-python` wheel, use `.venv/bin/python` directly or `uv run --no-sync` to avoid replacing the CUDA build during another dependency sync.
+This procedure produced:
 
----
+- `robustness_results_colab.json` — GPU robustness benchmark results
+- `gpu_memory.csv` — GPU memory samples collected every 100 ms
+
+During the validated run, all 45 regression checks passed and the observed peak whole-device GPU memory usage was 1205 MiB.
+
+After installing the CUDA-enabled `llama-cpp-python` wheel, `.venv/bin/python` is used directly to avoid a later dependency sync replacing the CUDA-enabled build.
 
 ## 5. Evaluation
 
