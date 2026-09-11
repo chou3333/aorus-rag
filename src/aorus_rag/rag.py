@@ -495,6 +495,37 @@ def answer_question(query):
         top_k=1,
         per_product=True,
     )
+    if results:
+        best_score = max(
+            result["final_score"]
+            for result in results
+        )
+
+        if best_score < 0.35:
+            if get_response_language(query) == "zh":
+                answer = "抱歉，我無法從產品規格中找到與這個問題相關的資訊。"
+            else:
+                answer = "Sorry, I could not find relevant information in the product specifications."
+
+            metrics = {
+                "ttft": 0.0,
+                "tps": 0.0,
+                "generated_tokens": 0,
+                "generation_time": 0.0,
+            }
+
+            print()
+            print("=== Answer ===")
+            print(answer)
+
+            print()
+            print("=== Performance ===")
+            print("TTFT: N/A (low-confidence retrieval)")
+            print("Generated Tokens: 0")
+            print("Generation Time: N/A")
+            print("TPS: N/A")
+
+            return answer, results, metrics
 
     # 使用者有指定型號時，只保留該型號
     if has_variant:
