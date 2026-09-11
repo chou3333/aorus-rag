@@ -1,4 +1,4 @@
-# AORUS MASTER 16 AM6H — Local Product Specification RAG Assistant
+# AORUS MASTER 16 AM6H — Product Specification RAG Assistant
 
 A lightweight RAG system for answering product-specification questions about the GIGABYTE AORUS MASTER 16 AM6H.
 
