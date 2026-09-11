@@ -1,0 +1,16 @@
+﻿question,language,expected_category,top1_category,retrieval_correct,answer,ttft_seconds,generated_tokens,generation_time_seconds,tps
+這台筆電使用什麼處理器？,zh,中央處理器,中央處理器,True,這台筆電使用 Intel® Core™ Ultra 9 Processor 275HX。,0.14596814699962124,19,0.1681605870007843,112.98723642009756
+What CPU does this laptop use?,en,中央處理器,中央處理器,True,"Intel® Core™ Ultra 9 Processor 275HX (36MB cache, up to 5.4 GHz, 24 cores, 24 threads)",0.04156506400067883,37,0.28788761899977544,128.52237316961123
+這台筆電的顯示卡是什麼？,zh,顯示晶片,顯示晶片,True,這台筆電的顯示卡是NVIDIA® GeForce RTX™ 5090 Laptop GPU。,0.03132489400013583,23,0.17982208399917,127.90420113308309
+What GPU does this laptop use?,en,顯示晶片,顯示晶片,True,NVIDIA® GeForce RTX™ 5090 Laptop GPU,0.01470544699986931,14,0.10783989799983829,129.82208124882493
+這台筆電的記憶體最高是多少？,zh,記憶體,記憶體,True,這台筆電的記憶體最高可支援至64GB DDR5 5600MHz。,0.02524732599977142,24,0.18927141499989375,126.80203188639696
+What is the maximum RAM capacity?,en,記憶體,記憶體,True,"The maximum RAM capacity is up to 64GB DDR5 5600MHz, with 2x SO-DIMM sockets for expansion.",0.01462971699947957,32,0.24925159000031272,128.38433648491412
+這台 laptop 的 RAM 最大多少？,mixed,記憶體,記憶體,True,這台 laptop 的 RAM 最大可支援至 64GB DDR5 5600MHz。,0.05097956100053125,23,0.17953379699974903,128.10958373498974
+這台筆電的電池容量是多少？,zh,電池,電池,True,電池容量為 99Wh。,0.018763427000521915,9,0.066404471000169,135.53304264673827
+What is the battery capacity?,en,電池,電池,True,The battery capacity is 99Wh.,0.036216086000422365,9,0.06604760000027454,136.26536013363983
+這台筆電有支援 Wi-Fi 7 嗎？,zh,通訊,通訊,True,支援，規格值為 WIFI 7 (802.11be 2x2)。,0.02502662699953362,23,0.1797241459998986,127.97390062442125
+Does this laptop support Bluetooth?,en,通訊,通訊,True,"Yes, this laptop supports Bluetooth.",0.016852931999892462,7,0.05435718500029907,128.7778239428971
+這台筆電有 Thunderbolt 5 嗎？,zh,連接埠,連接埠,True,"支援，規格值為 1 x Type-C with Thunderbolt™5 (support USB4, DisplayPort™ 2.1 and Power Delivery 3.0)",0.04133202000048186,36,0.28498598099940864,126.32200318679782
+What is the laptop weight?,en,重量,重量,True,The weight of the AORUS MASTER 16 AM6H laptop is approximately 2.5 kg.,0.02375603099972068,23,0.1800695590000032,127.72841854963164
+這台筆電尺寸多大？,zh,尺寸,尺寸,True,357 x 254 x 23~29.9 mm,0.027235412000663928,18,0.1410419459998593,127.62160839739092
+What color is this laptop?,en,顏色,顏色,True,The laptop is Dark Tide.,0.017097621000175423,6,0.04440996399989672,135.10481566735686
