@@ -191,7 +191,48 @@ Raw GPU results are available in:
 
 ### Reproducing GPU Evaluation
 
-For CUDA execution in Colab, install a CUDA-enabled `llama-cpp-python` build and run:
+The following setup was successfully used in Google Colab with an NVIDIA Tesla T4.
+
+Install project dependencies:
+
+```bash
+uv sync
+```
+
+Replace the default `llama-cpp-python` installation with the CUDA-enabled build used during validation:
+
+```bash
+uv pip uninstall --python .venv/bin/python llama-cpp-python
+
+uv pip install --python .venv/bin/python \
+  "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35-cu125/llama_cpp_python-0.3.35-py3-none-manylinux_2_35_x86_64.whl"
+```
+
+Verify GPU offload support:
+
+```bash
+.venv/bin/python -c \
+  "import llama_cpp; print('GPU offload support:', llama_cpp.llama_supports_gpu_offload())"
+```
+
+Expected result:
+
+```text
+GPU offload support: True
+```
+
+Download the GGUF model if it is not already available:
+
+```bash
+mkdir -p models
+
+.venv/bin/hf download \
+  Qwen/Qwen2.5-1.5B-Instruct-GGUF \
+  qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  --local-dir models
+```
+
+Run the robustness benchmark with GPU offloading:
 
 ```bash
 N_GPU_LAYERS=-1 \
@@ -199,7 +240,16 @@ PYTHONPATH=src \
 .venv/bin/python -m aorus_rag.evaluate_robustness
 ```
 
-GPU memory can be monitored with `nvidia-smi`.
+To record GPU memory usage every 100 ms:
+
+```bash
+nvidia-smi \
+  --query-gpu=timestamp,index,name,memory.used,memory.total \
+  --format=csv \
+  -lms 100 > gpu_memory.csv &
+```
+
+After manually installing the CUDA-enabled `llama-cpp-python` wheel, use `.venv/bin/python` directly or `uv run --no-sync` to avoid replacing the CUDA build during another dependency sync.
 
 ---
 
