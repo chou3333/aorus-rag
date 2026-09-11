@@ -1,3 +1,4 @@
+import os
 import time
 from llama_cpp import Llama
 
@@ -5,6 +6,7 @@ from aorus_rag.retriever import retrieve
 
 
 MODEL_PATH = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+N_GPU_LAYERS = int(os.getenv("N_GPU_LAYERS", "0"))
 
 
 print("正在載入 LLM...")
@@ -12,10 +14,10 @@ print("正在載入 LLM...")
 llm = Llama(
     model_path=MODEL_PATH,
     n_ctx=2048,
-    n_gpu_layers=0,
+    n_gpu_layers=N_GPU_LAYERS,
     verbose=False,
 )
-
+print(f"GPU layers: {N_GPU_LAYERS}")
 print("LLM 載入完成")
 
 
