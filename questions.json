@@ -73,5 +73,24 @@
     "question": "What color is this laptop?",
     "expected_category": "顏色",
     "language": "en"
+  },
+
+  {
+    "question": "BZH 使用什麼顯示卡？",
+    "expected_category": "顯示晶片",
+    "expected_product": "AORUS MASTER 16 BZH",
+    "language": "zh"
+  },
+  {
+    "question": "What GPU does the BYH model use?",
+    "expected_category": "顯示晶片",
+    "expected_product": "AORUS MASTER 16 BYH",
+    "language": "en"
+  },
+  {
+    "question": "BXH 的 GPU 是什麼？",
+    "expected_category": "顯示晶片",
+    "expected_product": "AORUS MASTER 16 BXH",
+    "language": "mixed"
   }
 ]

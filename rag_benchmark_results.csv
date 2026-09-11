@@ -1,16 +1,24 @@
-﻿question,language,expected_category,top1_category,retrieval_correct,answer,ttft_seconds,generated_tokens,generation_time_seconds,tps
-這台筆電使用什麼處理器？,zh,中央處理器,中央處理器,True,這台筆電使用 Intel® Core™ Ultra 9 Processor 275HX。,0.7588291669962928,19,0.27749425001093186,68.46988721118184
-What CPU does this laptop use?,en,中央處理器,中央處理器,True,"Intel® Core™ Ultra 9 Processor 275HX (36MB cache, up to 5.4 GHz, 24 cores, 24 threads)",0.05285412500961684,37,0.5383737499942072,68.72549042444605
-這台筆電的顯示卡是什麼？,zh,顯示晶片,顯示晶片,True,這台筆電的顯示卡是NVIDIA® GeForce RTX™ 5090 Laptop GPU。,0.2621352080022916,23,0.3355900830065366,68.53599425210669
-What GPU does this laptop use?,en,顯示晶片,顯示晶片,True,NVIDIA® GeForce RTX™ 5090 Laptop GPU,0.0523105000029318,14,0.20323425000242423,68.8860268376664
-這台筆電的記憶體最高是多少？,zh,記憶體,記憶體,True,這台筆電的記憶體最高支援至64GB DDR5 5600MHz。,0.16235195900662802,23,0.3340570000000298,68.85052550911355
-What is the maximum RAM capacity?,en,記憶體,記憶體,True,"The maximum RAM capacity is up to 64GB DDR5 5600MHz, with 2x SO-DIMM sockets for expansion.",0.05072187499899883,32,0.4663244580005994,68.62174919411768
-這台 laptop 的 RAM 最大多少？,mixed,記憶體,記憶體,True,這台 laptop 的 RAM 最大可支援至 64GB DDR5 5600MHz。,0.06069645899697207,23,0.33379425000748597,68.90472199411518
-這台筆電的電池容量是多少？,zh,電池,電池,True,這台筆電的電池容量為 99Wh。,0.09841583301022183,14,0.2004226249991916,69.85239316198192
-What is the battery capacity?,en,電池,電池,True,The battery capacity is 99Wh.,0.052810875000432134,9,0.12805462499090936,70.2825063963048
-這台筆電有支援 Wi-Fi 7 嗎？,zh,通訊,通訊,True,支援，規格值為 WIFI 7 (802.11be 2x2)。,0.1692158749938244,23,0.3576905420050025,64.3013926817174
-Does this laptop support Bluetooth?,en,通訊,通訊,True,"Yes, this laptop supports Bluetooth. The Bluetooth version supported is v5.4.",0.05443787499098107,17,0.24795124999945983,68.56186447955812
-這台筆電有 Thunderbolt 5 嗎？,zh,連接埠,連接埠,True,"支援。規格值顯示有 Type-C with Thunderbolt™5 (support USB4, DisplayPort™ 2.1 and Power Delivery 3.0)。",0.4403154579922557,35,0.5103456670040032,68.58096827875185
-What is the laptop weight?,en,重量,重量,True,The weight of the AORUS MASTER 16 AM6H is approximately 2.5 kg.,0.15922712499741465,22,0.320571000003838,68.6275427276223
-這台筆電尺寸多大？,zh,尺寸,尺寸,True,357 x 254 x 23~29.9 mm,0.20361770800082013,18,0.2637546670011943,68.24523791239112
-What color is this laptop?,en,顏色,顏色,True,The color of this laptop is Dark Tide.,0.10342716600280255,9,0.12989508399914484,69.28668678530784
+﻿question,language,expected_category,top1_category,retrieval_correct,answer,used_llm,ttft_seconds,generated_tokens,generation_time_seconds,tps
+這台筆電使用什麼處理器？,zh,中央處理器,中央處理器,True,這台筆電使用 Intel® Core™ Ultra 9 Processor 275HX。,True,0.717572209003265,19,0.2760912079975242,68.81783790873334
+What CPU does this laptop use?,en,中央處理器,中央處理器,True,This laptop uses an Intel® Core™ Ultra 9 Processor 275HX.,True,0.3311293750011828,18,0.26183275000948925,68.74617479802527
+這台筆電的顯示卡是什麼？,zh,顯示晶片,顯示晶片,True,"各型號規格如下：
+BZH: NVIDIA® GeForce RTX™ 5090 Laptop GPU
+BYH: NVIDIA® GeForce RTX™ 5080 Laptop GPU
+BXH: NVIDIA® GeForce RTX™ 5070 Ti Laptop GPU",False,,58,,
+What GPU does this laptop use?,en,顯示晶片,顯示晶片,True,"BZH: NVIDIA® GeForce RTX™ 5090 Laptop GPU
+BYH: NVIDIA® GeForce RTX™ 5080 Laptop GPU
+BXH: NVIDIA® GeForce RTX™ 5070 Ti Laptop GPU",False,,51,,
+這台筆電的記憶體最高是多少？,zh,記憶體,記憶體,True,這台筆電的記憶體最高可達 64GB DDR5 5600MHz，並且支援 2x SO-DIMM 插槽以進行擴充。,True,0.3165759999974398,41,0.600215999991633,68.30874218709855
+What is the maximum RAM capacity?,en,記憶體,記憶體,True,The maximum RAM capacity is up to 64GB DDR5 5600MHz.,True,0.2961105409922311,20,0.2848150420031743,70.22101030667157
+這台 laptop 的 RAM 最大多少？,mixed,記憶體,記憶體,True,這台 laptop 的 RAM 最大可支援至 64GB DDR5 5600MHz，並支援 2x SO-DIMM 插槽以進行擴充。,True,0.2732784999971045,40,0.5711095000006026,70.03910808690416
+這台筆電的電池容量是多少？,zh,電池,電池,True,電池容量為 99Wh。,True,0.12573733300087042,9,0.1285526249994291,70.01023899776429
+What is the battery capacity?,en,電池,電池,True,99Wh,True,0.23278616600146051,3,0.04279754200251773,70.09748363173551
+這台筆電有支援 Wi-Fi 7 嗎？,zh,通訊,通訊,True,是的，這台筆電支援 Wi-Fi 7（802.11be 2x2）。,True,0.30611766599758994,25,0.35710737500630785,70.00695518976164
+Does this laptop support Bluetooth?,en,通訊,通訊,True,"Yes, this laptop supports Bluetooth.",True,0.35121520899701864,7,0.10142337500292342,69.01762044300175
+這台筆電有 Thunderbolt 5 嗎？,zh,連接埠,連接埠,True,是的，這台筆電支援 Thunderbolt 5。,True,0.5699795419932343,13,0.19004866700561251,68.40353160496561
+What is the laptop weight?,en,重量,重量,True,The weight of the laptop is approximately 2.5 kg.,True,0.2841596250073053,13,0.18567000000621192,70.01669628677256
+這台筆電尺寸多大？,zh,尺寸,尺寸,True,這台筆電的尺寸為 357 x 254 x 23~29.9 mm。,True,0.31787841698678676,27,0.3918098750000354,68.91097372162344
+What color is this laptop?,en,顏色,顏色,True,Dark Tide,True,0.22300316600012593,2,0.028831874995375983,69.36767034127185
+BZH 使用什麼顯示卡？,zh,顯示晶片,顯示晶片,True,BZH 使用 NVIDIA® GeForce RTX™ 5090 Laptop GPU。,True,0.35579441698791925,17,0.24983683301252313,68.04441040584224
+What GPU does the BYH model use?,en,顯示晶片,顯示晶片,True,NVIDIA® GeForce RTX™ 5080 Laptop GPU,True,0.41638754100131337,14,0.20555379199504387,68.10869244551594
+BXH 的 GPU 是什麼？,mixed,顯示晶片,顯示晶片,True,BXH 的 GPU 是 NVIDIA® GeForce RTX™ 5070 Ti Laptop GPU。,True,0.36461800000688527,20,0.3206859999918379,62.366302241161264

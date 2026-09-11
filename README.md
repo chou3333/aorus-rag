@@ -131,6 +131,22 @@ aorus-rag/
 
 ## 4. Data Parsing
 
+The AM6H page contains three models: **BZH**, **BYH**, and **BXH**.
+The parser reads model titles and their associated specification records from
+`__NUXT_DATA__` in the saved HTML, rather than stopping after the first model.
+`specs.json` is keyed by model name, then specification category; the field
+example below illustrates the contents of one model.
+
+To rebuild the knowledge base after saving the HTML to
+`data/aorus_master_16_am6h.html`, run these commands in order:
+
+```bash
+uv run python -m aorus_rag.scraper
+uv run python -m aorus_rag.chunker
+uv run python -m aorus_rag.embedder
+```
+
+
 The official product page contains structured specification fields such as:
 
 ```text
@@ -182,7 +198,7 @@ Each specification category becomes one independent chunk.
 Example:
 
 ```text
-產品：AORUS MASTER 16 AM6H
+產品：AORUS MASTER 16 BZH
 規格類別：記憶體
 內容：
 Up to 64GB DDR5 5600MHz
@@ -191,7 +207,7 @@ Up to 64GB DDR5 5600MHz
 
 This preserves the semantic relationship between each specification key and its value.
 
-A total of **17 specification chunks** are generated.
+A total of **51 specification chunks** are generated: 17 per model.
 
 ---
 
@@ -208,7 +224,7 @@ Each specification chunk is converted into a normalized 384-dimensional embeddin
 The resulting embedding matrix has shape:
 
 ```text
-(17, 384)
+(51, 384)
 ```
 
 The embeddings are stored in:
@@ -224,6 +240,14 @@ No external vector database is required.
 ---
 
 ## 7. Retrieval
+
+Queries containing BZH, BYH, or BXH (case insensitive) filter candidates to the
+requested models. `retrieve` returns at most `top_k` results by default.
+The RAG answer path uses `per_product=True` to provide the best specification
+chunk for each requested model. When no model is specified, it includes one
+chunk per model so the answer can explain differences without assuming BZH.
+For example, try `BYH 的 GPU 是什麼？` or `BZH 和 BXH 的顯示卡差異？`.
+
 
 For a user query, the system:
 
@@ -534,6 +558,11 @@ Therefore, the tested configuration fits within the required **4 GB VRAM budget*
 
 ## 16. Retrieval Benchmark
 
+The measurements below and the committed benchmark CSVs are historical results
+from the original 17-chunk, single-model knowledge base. They do not measure
+multi-model answer accuracy or the performance of the expanded context.
+
+
 The retrieval benchmark contains **15 questions** across:
 
 - Traditional Chinese
@@ -797,7 +826,7 @@ Key results:
 ```text
 No LangChain / LlamaIndex
 Pure Python RAG core
-17 structured specification chunks
+51 structured specification chunks across BZH, BYH, and BXH
 Traditional Chinese + English support
 Hybrid semantic + lexical retrieval
 Top-1 retrieval accuracy: 100%

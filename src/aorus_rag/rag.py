@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from llama_cpp import Llama
 
@@ -17,44 +18,297 @@ llm = Llama(
     n_gpu_layers=N_GPU_LAYERS,
     verbose=False,
 )
+
 print(f"GPU layers: {N_GPU_LAYERS}")
 print("LLM 載入完成")
 
 
-def build_context(results):
-    chunk = results[0]["chunk"]
+def query_has_variant(query):
+    query_upper = query.upper()
 
-    return (
-        f"產品：{chunk['product']}\n"
-        f"規格名稱：{chunk['category']}\n"
-        f"規格值：\n{chunk['content']}"
+    return any(
+        variant in query_upper
+        for variant in ["BZH", "BYH", "BXH"]
     )
 
 
-def answer_question(query):
-    results = retrieve(query, top_k=1)
+def get_target_variant(query):
+    query_upper = query.upper()
 
-    context = build_context(results)
-    system_prompt = """
-    你是一個 GIGABYTE AORUS MASTER 16 AM6H 產品規格助理。
+    for variant in ["BZH", "BYH", "BXH"]:
+        if variant in query_upper:
+            return variant
 
-    只能根據提供的產品規格回答。
+    return None
 
-    規則：
-    1. 「規格值」中的內容就是答案依據。
-    2. 如果使用者問是否支援某功能，只要該功能或版本出現在「規格值」中，就回答支援，並附上該規格。
-    3. 比對名稱時忽略大小寫、空格、連字號、™、® 等符號差異。
-    4. 只有當「規格值」完全沒有相關資訊時，才能回答找不到資訊。
-    5. 中文問題用繁體中文回答；英文問題用英文回答。
-    6. 回答簡潔但要包含實際規格值。
+
+def get_main_value(chunk):
+    lines = [
+        line.strip()
+        for line in chunk["content"].splitlines()
+        if line.strip()
+    ]
+
+    if not lines:
+        return ""
+
+    return lines[0]
+
+
+def get_response_language(query):
+    """
+    如果問題包含中文字元，就使用繁體中文。
+    否則使用英文。
+    """
+    if re.search(r"[\u4e00-\u9fff]", query):
+        return "zh"
+
+    return "en"
+
+
+def build_context(results, compare_variants=False):
+
+    # 多型號情況
+    if compare_variants and len(results) > 1:
+
+        categories = {
+            result["chunk"]["category"]
+            for result in results
+        }
+
+        # 三筆都是同一規格類別
+        if len(categories) == 1:
+
+            contents = [
+                result["chunk"]["content"].strip()
+                for result in results
+            ]
+
+            # ==================================================
+            # 情況 1：
+            # 三個 variant 的完整規格完全相同
+            #
+            # 例如：
+            # - 通訊
+            # - 連接埠
+            # - 重量
+            # - 電池
+            #
+            # 這時候只需要提供一份完整規格，
+            # 但不能只取第一行。
+            # ==================================================
+            if len(set(contents)) == 1:
+
+                chunk = results[0]["chunk"]
+
+                return (
+                    "此規格適用於 BZH、BYH、BXH 三個型號。\n"
+                    f"規格名稱：{chunk['category']}\n"
+                    f"規格值：\n{chunk['content']}"
+                )
+
+            # ==================================================
+            # 情況 2：
+            # 三個 variant 的規格不同
+            #
+            # 例如 GPU。
+            #
+            # 為避免小模型被過多資訊干擾，
+            # 每個型號只保留主要規格值。
+            # ==================================================
+            context_parts = []
+
+            for result in results:
+                chunk = result["chunk"]
+
+                main_value = get_main_value(chunk)
+
+                context_parts.append(
+                    f"型號：{chunk['product']}\n"
+                    f"規格：{chunk['category']}\n"
+                    f"主要規格值：{main_value}"
+                )
+
+            return "\n\n".join(context_parts)
+
+    # 一般情況保留完整規格
+    return "\n\n".join(
+        f"產品：{chunk['product']}\n"
+        f"規格名稱：{chunk['category']}\n"
+        f"規格值：\n{chunk['content']}"
+        for chunk in (
+            result["chunk"]
+            for result in results
+        )
+    )
+
+
+def build_forced_comparison_answer(results):
+    """
+    如果三個型號是同一 category，
+    但主要規格值不同，
+    建立三個型號的比較答案。
     """
 
+    if len(results) <= 1:
+        return None
+
+    categories = {
+        result["chunk"]["category"]
+        for result in results
+    }
+
+    if len(categories) != 1:
+        return None
+
+    full_contents = [
+        result["chunk"]["content"].strip()
+        for result in results
+    ]
+
+    # 完整規格相同，不需要逐型號列出
+    if len(set(full_contents)) == 1:
+        return None
+
+    values = [
+        get_main_value(result["chunk"])
+        for result in results
+    ]
+
+    if len(set(values)) == 1:
+        return None
+
+    lines = []
+
+    for result in results:
+        chunk = result["chunk"]
+
+        variant = chunk["product"].split()[-1]
+        main_value = get_main_value(chunk)
+
+        lines.append(
+            f"{variant}: {main_value}"
+        )
+
+    return "\n".join(lines)
+
+def answer_question(query):
+
+    has_variant = query_has_variant(query)
+
+    # 每個型號取最相關的一筆
+    results = retrieve(
+        query,
+        top_k=1,
+        per_product=True,
+    )
+
+    # 使用者有指定型號時，只保留該型號
+    if has_variant:
+        target_variant = get_target_variant(query)
+
+        results = [
+            result
+            for result in results
+            if target_variant
+            in result["chunk"]["product"].upper()
+        ]
+
+    context = build_context(
+        results,
+        compare_variants=not has_variant,
+    )
+
+    forced_answer = None
+
+    if not has_variant:
+        forced_answer = build_forced_comparison_answer(
+            results
+        )
+
+    # ==================================================
+    # 新增：deterministic structured response
+    # ==================================================
+    if forced_answer is not None:
+
+        if get_response_language(query) == "zh":
+            answer = "各型號規格如下：\n" + forced_answer
+        else:
+            answer = forced_answer
+
+        print()
+        print("=== Answer ===")
+        print(answer)
+
+        generated_tokens = llm.tokenize(
+            answer.encode("utf-8"),
+            add_bos=False,
+        )
+
+        token_count = len(generated_tokens)
+
+        metrics = {
+            "ttft": 0.0,
+            "tps": 0.0,
+            "generated_tokens": token_count,
+            "generation_time": 0.0,
+        }
+
+        print()
+        print("=== Performance ===")
+        print("TTFT: N/A (deterministic structured response)")
+        print(f"Generated Tokens: {token_count}")
+        print("Generation Time: N/A")
+        print("TPS: N/A")
+
+        return answer, results, metrics
+
+    # ==================================================
+    # 下面開始全部是你原本的 LLM generation
+    # ==================================================
+
+    response_language = get_response_language(query)
+
+    if response_language == "en":
+        language_instruction = """
+IMPORTANT:
+The user's question is in English.
+Answer in English only.
+Do not answer in Chinese.
+"""
+    else:
+        language_instruction = """
+重要：
+使用者的問題包含中文。
+請使用繁體中文回答。
+"""
+
+    system_prompt = """
+你是一個 GIGABYTE AORUS MASTER 16 AM6H 產品規格助理。
+
+只能根據提供的 Context 回答。
+
+規則：
+
+1. 不可以自行增加 Context 沒有的資訊。
+2. 必須包含實際規格值。
+3. 不同型號的資料不可混用。
+4. 如果規格包含主要數值與備註，先回答主要數值。
+5. 如果 Context 明確出現某功能，就不能回答不支援。
+6. 回答簡潔。
+"""
+
     user_prompt = f"""
+{language_instruction}
+
 Context:
 {context}
 
 Question:
 {query}
+
+請根據 Context 回答。
+依照指定語言回答。
 """
 
     start_time = time.perf_counter()
@@ -91,7 +345,11 @@ Question:
                 if first_token_time is None:
                     first_token_time = time.perf_counter()
 
-                print(text, end="", flush=True)
+                print(
+                    text,
+                    end="",
+                    flush=True,
+                )
 
                 answer_parts.append(text)
 
@@ -102,19 +360,31 @@ Question:
 
     generated_tokens = llm.tokenize(
         answer.encode("utf-8"),
-        add_bos=False
+        add_bos=False,
     )
 
     token_count = len(generated_tokens)
 
     if first_token_time is not None:
-        ttft = first_token_time - start_time
-        generation_time = end_time - first_token_time
+
+        ttft = (
+            first_token_time
+            - start_time
+        )
+
+        generation_time = (
+            end_time
+            - first_token_time
+        )
 
         if generation_time > 0:
-            tps = token_count / generation_time
+            tps = (
+                token_count
+                / generation_time
+            )
         else:
             tps = 0
+
     else:
         ttft = 0
         generation_time = 0
@@ -122,10 +392,27 @@ Question:
 
     print()
     print("=== Performance ===")
-    print(f"TTFT: {ttft:.3f} seconds")
-    print(f"Generated Tokens: {token_count}")
-    print(f"Generation Time: {generation_time:.3f} seconds")
-    print(f"TPS: {tps:.2f} tokens/second")
+
+    print(
+        f"TTFT: "
+        f"{ttft:.3f} seconds"
+    )
+
+    print(
+        f"Generated Tokens: "
+        f"{token_count}"
+    )
+
+    print(
+        f"Generation Time: "
+        f"{generation_time:.3f} seconds"
+    )
+
+    print(
+        f"TPS: "
+        f"{tps:.2f} tokens/second"
+    )
+
     metrics = {
         "ttft": ttft,
         "tps": tps,
@@ -134,15 +421,31 @@ Question:
     }
 
     return answer, results, metrics
+
+
 if __name__ == "__main__":
-    query = input("請輸入問題：")
 
-    answer, results, metrics = answer_question(query)
+    query = input(
+        "請輸入問題："
+    )
+
+    answer, results, metrics = (
+        answer_question(query)
+    )
+
     print()
-    print("=== Retrieval Results ===")
+    print(
+        "=== Retrieval Results ==="
+    )
 
-    for rank, result in enumerate(results, start=1):
+    for rank, result in enumerate(
+        results,
+        start=1,
+    ):
         print(
-            f"{rank}. {result['chunk']['category']} "
-            f"(score={result['final_score']:.4f})"
+            f"{rank}. "
+            f"{result['chunk']['product']} | "
+            f"{result['chunk']['category']} "
+            f"(score="
+            f"{result['final_score']:.4f})"
         )

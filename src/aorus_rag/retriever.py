@@ -1,4 +1,5 @@
 import json
+import re
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
@@ -124,6 +125,8 @@ with open(CHUNKS_PATH, "r", encoding="utf-8") as file:
 
 
 embeddings = np.load(EMBEDDINGS_PATH)
+if len(embeddings) != len(chunks):
+    raise ValueError("Chunks 與 embeddings 數量不符，請重新執行 python -m aorus_rag.embedder")
 
 
 print("正在載入 Embedding 模型...")
@@ -139,16 +142,32 @@ def calculate_alias_bonus(query, category):
     aliases = CATEGORY_ALIASES.get(category, [])
 
     for alias in aliases:
-        if alias.lower() in query_lower:
-            return 0.15
+        pattern = re.escape(alias.lower())
+        if alias.isascii():
+            pattern = rf"(?<![a-z0-9]){pattern}(?![a-z0-9])"
+        if re.search(pattern, query_lower):
+            return 0.35
 
     return 0.0
 
 
-def retrieve(query, top_k=3):
+def retrieve(query, top_k=3, *, per_product=False):
 
+    products = list(dict.fromkeys(chunk["product"] for chunk in chunks))
+    requested = [product for product in products if re.search(
+        rf"(?<![a-z0-9]){re.escape(product.split()[-1])}(?![a-z0-9])",
+        query, re.IGNORECASE,
+    )]
+    # Model codes are metadata filters, not useful semantic specification terms.
+    semantic_query = query
+    for product in requested:
+        semantic_query = re.sub(re.escape(product), "", semantic_query, flags=re.IGNORECASE)
+        semantic_query = re.sub(
+            rf"(?<![a-z0-9]){re.escape(product.split()[-1])}(?![a-z0-9])",
+            "", semantic_query, flags=re.IGNORECASE,
+        )
     query_embedding = model.encode(
-        query,
+        semantic_query.strip() or query,
         normalize_embeddings=True
     )
 
@@ -173,7 +192,15 @@ def retrieve(query, top_k=3):
 
     final_scores = np.array(final_scores)
 
-    top_indices = np.argsort(final_scores)[::-1][:top_k]
+    # Exact model filtering prevents similar model names from crossing over.
+    selected = requested or products
+    top_indices = []
+    for product in selected:
+        ranked = [int(i) for i in np.argsort(final_scores)[::-1]
+                  if chunks[i]["product"] == product]
+        top_indices.extend(ranked[:max(0, top_k)])
+    if not per_product:
+        top_indices = sorted(top_indices, key=lambda i: final_scores[i], reverse=True)[:max(0, top_k)]
 
     results = []
 
