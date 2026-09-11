@@ -143,11 +143,14 @@ def build_context(results, compare_variants=False):
     )
 
 
-def build_forced_comparison_answer(results):
+def build_forced_comparison_answer(results, query):
     """
     如果三個型號是同一 category，
-    但主要規格值不同，
+    但規格內容不同，
     建立三個型號的比較答案。
+
+    - 一般 GPU 問題：只列主要 GPU 型號
+    - 詳細規格問題：列出完整規格內容
     """
 
     if len(results) <= 1:
@@ -166,32 +169,50 @@ def build_forced_comparison_answer(results):
         for result in results
     ]
 
-    # 完整規格相同，不需要逐型號列出
+    # 三個型號內容完全一樣，不需要做 variant comparison
     if len(set(full_contents)) == 1:
         return None
 
-    values = [
-        get_main_value(result["chunk"])
-        for result in results
-    ]
+    query_lower = query.lower()
 
-    if len(set(values)) == 1:
-        return None
+    # 判斷使用者是不是在問「完整顯示晶片規格」
+    wants_full_detail = any(
+        keyword in query_lower
+        for keyword in [
+            "顯示晶片",
+            "顯示卡規格",
+            "gpu 規格",
+            "gpu spec",
+            "gpu specs",
+            "graphics spec",
+            "graphics specs",
+            "graphics specification",
+        ]
+    )
 
     lines = []
 
     for result in results:
         chunk = result["chunk"]
-
         variant = chunk["product"].split()[-1]
-        main_value = get_main_value(chunk)
 
-        lines.append(
-            f"{variant}: {main_value}"
-        )
+        if wants_full_detail:
+            # 保留完整多行規格
+            value = chunk["content"].strip()
 
-    return "\n".join(lines)
+            lines.append(
+                f"{variant}:\n{value}"
+            )
 
+        else:
+            # 一般 GPU 問題只取第一行
+            main_value = get_main_value(chunk)
+
+            lines.append(
+                f"{variant}: {main_value}"
+            )
+
+    return "\n\n".join(lines)
 def answer_question(query):
 
     has_variant = query_has_variant(query)
@@ -223,7 +244,8 @@ def answer_question(query):
 
     if not has_variant:
         forced_answer = build_forced_comparison_answer(
-            results
+            results,
+            query,
         )
 
     # ==================================================
