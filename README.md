@@ -142,7 +142,7 @@ AORUS MASTER 16 BZH介紹一下
 
 ## 4. 4GB VRAM Design
 
-The project targets a 4GB VRAM environment.
+The project targets the assignment's 4GB VRAM requirement. For GPU memory measurements reported by `nvidia-smi`, this is treated as a 4 GiB (4096 MiB) budget.
 
 Resource-control choices include:
 
@@ -178,7 +178,7 @@ Results:
 
 The observed peak of **1205 MiB** is below the **4 GiB target**.
 
-The benchmark was performed on a Tesla T4, which has more than 4GB of physical VRAM. Therefore, this result demonstrates observed usage below the 4GB budget rather than execution on a physical 4GB GPU.
+The benchmark was performed on a Tesla T4, which has more than 4GB of physical VRAM. Therefore, this result demonstrates observed usage below the 4 GiB (4096 MiB) measurement budget rather than execution on a physical 4GB GPU.
 
 TTFT measures the time from the generation call to the first non-empty text fragment, excluding retrieval and model loading.
 
